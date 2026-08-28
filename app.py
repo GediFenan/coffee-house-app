@@ -1,31 +1,38 @@
-from flask import Flask, request, redirect, render_template_string
+from flask import Flask, request, redirect, render_template_string, session
+import os
 
 app = Flask(__name__)
+app.secret_key = "coffee-house-secret-key"
+
+MENU = [
+    {"id": 1, "name": "Ethiopian Coffee", "price": 40},
+    {"id": 2, "name": "Macchiato", "price": 50},
+    {"id": 3, "name": "Tea", "price": 30},
+    {"id": 4, "name": "Espresso", "price": 45},
+    {"id": 5, "name": "Cappuccino", "price": 60},
+]
 
 orders = []
-
-menu = [
-    {"name": "Ethiopian Coffee", "price": 40},
-    {"name": "Macchiato", "price": 50},
-    {"name": "Tea", "price": 30},
-    {"name": "Espresso", "price": 45},
-    {"name": "Cappuccino", "price": 60}
-]
+order_number = 1
 
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Coffee House</title>
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1">
+    <title>My Coffee House</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
         body {
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             background: #f5f1eb;
-            padding: 20px;
+            margin: 0;
+            padding: 15px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
         }
 
         h1 {
@@ -33,119 +40,204 @@ HTML = """
             color: #6f4e37;
         }
 
-        .item {
+        .card {
             background: white;
-            padding: 20px;
-            margin: 15px 0;
+            padding: 18px;
+            margin: 12px 0;
             border-radius: 15px;
+            box-shadow: 0 2px 8px #ddd;
         }
 
         button {
             background: #6f4e37;
             color: white;
             border: none;
-            padding: 12px 20px;
+            padding: 11px 18px;
             border-radius: 8px;
+            cursor: pointer;
         }
 
-        input {
-            padding: 12px;
-            margin: 5px;
-            width: 90%;
+        input, select {
+            padding: 11px;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+        }
+
+        .cart {
+            background: #fff3df;
+            padding: 18px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+
+        .total {
+            font-size: 20px;
+            font-weight: bold;
+            color: #6f4e37;
+        }
+
+        a {
+            color: #6f4e37;
+            text-decoration: none;
+            font-weight: bold;
         }
     </style>
 </head>
 
 <body>
+<div class="container">
 
 <h1>☕ My Coffee House</h1>
 
 {% if page == "menu" %}
 
-<h2>Menu</h2>
+<div class="card">
+    <h2>Customer Information</h2>
 
-{% for item in menu %}
-
-<div class="item">
-
-    <h3>{{ item.name }}</h3>
-
-    <p>{{ item.price }} ETB</p>
-
-    <form method="POST" action="/order">
-
-        <input
-            type="hidden"
-            name="item"
-            value="{{ item.name }}">
-
-        <input
-            type="hidden"
-            name="price"
-            value="{{ item.price }}">
-
+    <form method="POST" action="/customer">
         <input
             type="text"
             name="customer"
-            placeholder="Your name"
+            placeholder="Customer name"
             required>
 
         <input
             type="number"
-            name="quantity"
-            value="1"
+            name="table"
+            placeholder="Table number"
             min="1"
-            max="20">
+            required>
 
         <button type="submit">
-            🛒 Order
+            Start Order
         </button>
-
     </form>
-
 </div>
 
-{% endfor %}
+{% if customer %}
+
+<div class="card">
+    <h2>☕ Menu</h2>
+
+    {% for item in menu %}
+
+    <div class="card">
+        <h3>{{ item.name }}</h3>
+        <p>{{ item.price }} ETB</p>
+
+        <form method="POST" action="/add">
+            <input
+                type="hidden"
+                name="id"
+                value="{{ item.id }}">
+
+            <input
+                type="number"
+                name="quantity"
+                value="1"
+                min="1"
+                max="20">
+
+            <button type="submit">
+                🛒 Add to Cart
+            </button>
+        </form>
+    </div>
+
+    {% endfor %}
+</div>
+
+{% if cart %}
+
+<div class="cart">
+    <h2>🛒 Your Cart</h2>
+
+    {% for item in cart %}
+        <p>
+            {{ item.name }}
+            × {{ item.quantity }}
+            = {{ item.total }} ETB
+        </p>
+    {% endfor %}
+
+    <hr>
+
+    <p class="total">
+        Total: {{ total }} ETB
+    </p>
+
+    <form method="POST" action="/place-order">
+        <button type="submit">
+            ✅ PLACE ORDER
+        </button>
+    </form>
+</div>
+
+{% endif %}
+
+{% endif %}
 
 {% elif page == "success" %}
 
-<h1>✅ Order Sent!</h1>
+<div class="card">
+    <h2>✅ Order Sent!</h2>
 
-<h2>Thank you {{ customer }}!</h2>
+    <p>Order #: <strong>{{ order.id }}</strong></p>
+    <p>Customer: <strong>{{ order.customer }}</strong></p>
+    <p>Table: <strong>{{ order.table }}</strong></p>
+    <p>Total: <strong>{{ order.total }} ETB</strong></p>
 
-<p>
-{{ quantity }} × {{ item }}
-</p>
+    <hr>
 
-<p>
-Total: {{ total }} ETB
-</p>
+    {% for item in order["items"] %}
+        <p>
+            {{ item.name }} × {{ item.quantity }}
+        </p>
+    {% endfor %}
 
-<a href="/">
-    ← Order Again
-</a>
+    <h3>👨‍🍳 Your order has been sent to the kitchen.</h3>
+
+    <a href="/">
+        ← New Order
+    </a>
+</div>
 
 {% elif page == "kitchen" %}
 
-<h1>👨‍🍳 Kitchen</h1>
+<h2>👨‍🍳 Kitchen Dashboard</h2>
 
 {% if orders %}
 
 {% for order in orders %}
 
-<div class="item">
+<div class="card">
 
-    <h3>Order #{{ loop.index }}</h3>
-
-    <p>Customer: {{ order.customer }}</p>
+    <h3>Order #{{ order.id }}</h3>
 
     <p>
-        {{ order.quantity }} ×
-        {{ order.item }}
+        👤 {{ order.customer }}
     </p>
 
     <p>
-        Total: {{ order.total }} ETB
+        🪑 Table {{ order.table }}
+    </p>
+
+    {% for item in order["items"] %}
+        <p>
+            ☕ {{ item.name }}
+            × {{ item.quantity }}
+        </p>
+    {% endfor %}
+
+    <p class="total">
+        {{ order.total }} ETB
+    </p>
+
+    <p>
+        Status: <strong>{{ order.status }}</strong>
     </p>
 
 </div>
@@ -154,16 +246,17 @@ Total: {{ total }} ETB
 
 {% else %}
 
-<h2>No orders yet ☕</h2>
+<div class="card">
+    <h3>No orders yet ☕</h3>
+</div>
 
 {% endif %}
 
-<a href="/">
-    ← Customer Menu
-</a>
+<a href="/">← Customer Menu</a>
 
 {% endif %}
 
+</div>
 </body>
 </html>
 """
@@ -172,39 +265,104 @@ Total: {{ total }} ETB
 @app.route("/")
 def home():
 
+    customer = session.get("customer")
+    table = session.get("table")
+    cart = session.get("cart", [])
+
+    total = sum(item["total"] for item in cart)
+
     return render_template_string(
         HTML,
         page="menu",
-        menu=menu
+        menu=MENU,
+        customer=customer,
+        table=table,
+        cart=cart,
+        total=total
     )
 
 
-@app.route("/order", methods=["POST"])
-def order():
+@app.route("/customer", methods=["POST"])
+def customer():
 
-    customer = request.form["customer"]
-    item = request.form["item"]
+    session["customer"] = request.form["customer"]
+    session["table"] = request.form["table"]
+    session["cart"] = []
 
-    price = float(request.form["price"])
+    return redirect("/")
 
+
+@app.route("/add", methods=["POST"])
+def add():
+
+    item_id = int(request.form["id"])
     quantity = int(request.form["quantity"])
 
-    total = price * quantity
+    selected = next(
+        item for item in MENU
+        if item["id"] == item_id
+    )
 
-    orders.append({
-        "customer": customer,
-        "item": item,
-        "quantity": quantity,
-        "total": total
-    })
+    cart = session.get("cart", [])
+
+    found = False
+
+    for item in cart:
+
+        if item["id"] == item_id:
+            item["quantity"] += quantity
+            item["total"] = (
+                item["quantity"] * item["price"]
+            )
+            found = True
+            break
+
+    if not found:
+
+        cart.append({
+            "id": selected["id"],
+            "name": selected["name"],
+            "price": selected["price"],
+            "quantity": quantity,
+            "total": selected["price"] * quantity
+        })
+
+    session["cart"] = cart
+
+    return redirect("/")
+
+
+@app.route("/place-order", methods=["POST"])
+def place_order():
+
+    global order_number
+
+    cart = session.get("cart", [])
+
+    if not cart:
+        return redirect("/")
+
+    total = sum(item["total"] for item in cart)
+
+    new_order = {
+        "id": order_number,
+        "customer": session.get("customer", "Customer"),
+        "table": session.get("table", "N/A"),
+        "items": cart,
+        "total": total,
+        "status": "NEW"
+    }
+
+    orders.append(new_order)
+
+    order_number += 1
+
+    session["cart"] = []
 
     return render_template_string(
         HTML,
         page="success",
-        customer=customer,
-        item=item,
-        quantity=quantity,
-        total=total
+        order=new_order
     )
 
 
@@ -220,8 +378,10 @@ def kitchen():
 
 if __name__ == "__main__":
 
+    port = int(os.environ.get("PORT", 5000))
+
     app.run(
         host="0.0.0.0",
-        port=5000,
-        debug=True
+        port=port,
+        debug=False
     )
