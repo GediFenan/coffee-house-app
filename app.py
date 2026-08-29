@@ -1,5 +1,9 @@
 from flask import Flask, request, redirect, url_for, session, render_template_string, jsonify
+import os
+import requests
 import sqlite3
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 from datetime import datetime
 
 app = Flask(__name__)
@@ -318,13 +322,41 @@ def checkout():
             body = render_template_string('<div class="notice">Please enter customer name and table number.</div>') + checkout_form(items,total)
             return page(body, "cart")
         item_text = ", ".join(f'{x["name"]} × {x["qty"]}' for x in items)
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Save locally for the existing Kitchen Dashboard
         conn = db()
         cur = conn.execute(
             "INSERT INTO fikir_orders(customer,table_no,items,total,status,created_at) VALUES(?,?,?,?,?,?)",
-            (customer, table_no, item_text, total, "NEW", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            (customer, table_no, item_text, total, "NEW", created_at)
         )
         order_id = cur.lastrowid
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
+
+        # Also send the order to Supabase when Render environment variables are available
+        if SUPABASE_URL and SUPABASE_KEY:
+            try:
+                requests.post(
+                    SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_orders",
+                    headers={
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": "Bearer " + SUPABASE_KEY,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    json={
+                        "customer": customer,
+                        "table_no": table_no,
+                        "items": item_text,
+                        "total": total,
+                        "status": "NEW",
+                        "created_at": created_at
+                    },
+                    timeout=10
+                )
+            except requests.RequestException:
+                pass
         session["cart"] = {}
         return redirect(url_for("success", order_id=order_id))
     body = checkout_form(items,total)
