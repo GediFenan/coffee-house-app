@@ -4,6 +4,7 @@ import requests
 import sqlite3
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 from datetime import datetime
 
 app = Flask(__name__)
@@ -436,8 +437,50 @@ def kitchen():
     return page(body, "kitchen", "Kitchen Dashboard — FIKIR")
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
+            session["admin_logged_in"] = True
+            return redirect(url_for("admin"))
+        return render_template_string("""
+        <div class="formbox">
+          <div class="card" style="padding:30px">
+            <h2>🔐 Admin Login</h2>
+            <div class="notice">❌ Incorrect password</div>
+            <form method="post">
+              <label>Password</label>
+              <input type="password" name="password" required autofocus>
+              <button class="btn" style="width:100%">Login</button>
+            </form>
+          </div>
+        </div>
+        """)
+    return render_template_string("""
+    <div class="formbox">
+      <div class="card" style="padding:30px">
+        <h2>🔐 Admin Login</h2>
+        <p>FIKIR Coffee House Admin</p>
+        <form method="post">
+          <label>Password</label>
+          <input type="password" name="password" required autofocus>
+          <button class="btn" style="width:100%">Login</button>
+        </form>
+      </div>
+    </div>
+    """)
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_logged_in", None)
+    return redirect(url_for("admin_login"))
+
 @app.route("/admin")
 def admin():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+
     conn = db()
 
     total_orders = conn.execute(
