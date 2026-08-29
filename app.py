@@ -435,6 +435,213 @@ def kitchen():
 """, orders=orders)
     return page(body, "kitchen", "Kitchen Dashboard — FIKIR")
 
+
+@app.route("/admin")
+def admin():
+    conn = db()
+
+    total_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders"
+    ).fetchone()[0]
+
+    total_sales = conn.execute(
+        "SELECT COALESCE(SUM(total),0) FROM fikir_orders"
+    ).fetchone()[0]
+
+    new_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders WHERE status='NEW'"
+    ).fetchone()[0]
+
+    preparing_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders WHERE status='PREPARING'"
+    ).fetchone()[0]
+
+    ready_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders WHERE status='READY'"
+    ).fetchone()[0]
+
+    completed_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders WHERE status='COMPLETED'"
+    ).fetchone()[0]
+
+    today_orders = conn.execute(
+        "SELECT COUNT(*) FROM fikir_orders WHERE date(created_at)=date('now','localtime')"
+    ).fetchone()[0]
+
+    today_sales = conn.execute(
+        "SELECT COALESCE(SUM(total),0) FROM fikir_orders "
+        "WHERE date(created_at)=date('now','localtime')"
+    ).fetchone()[0]
+
+    recent_orders = conn.execute("""
+        SELECT id, customer, table_no, items, total, status, created_at
+        FROM fikir_orders
+        ORDER BY id DESC
+        LIMIT 20
+    """).fetchall()
+
+    conn.close()
+
+    body = render_template_string(r"""
+    <div class="wrap">
+
+      <div class="title">
+        <div>
+          <h1>📊 Admin Dashboard</h1>
+          <p>FIKIR Coffee House — Order & Sales Overview</p>
+        </div>
+        <a class="btn secondary" href="/">← Back to Menu</a>
+      </div>
+
+      <div class="grid">
+
+        <div class="card">
+          <h3>📦 Total Orders</h3>
+          <div style="font-size:32px;font-weight:bold;color:#f0b34e">
+            {{ total_orders }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>💰 Total Sales</h3>
+          <div style="font-size:32px;font-weight:bold;color:#f0b34e">
+            ETB {{ total_sales }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>🆕 New</h3>
+          <div style="font-size:32px;font-weight:bold">
+            {{ new_orders }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>👨‍🍳 Preparing</h3>
+          <div style="font-size:32px;font-weight:bold">
+            {{ preparing_orders }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>☕ Ready</h3>
+          <div style="font-size:32px;font-weight:bold">
+            {{ ready_orders }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>✅ Completed</h3>
+          <div style="font-size:32px;font-weight:bold">
+            {{ completed_orders }}
+          </div>
+        </div>
+
+      </div>
+
+      <div class="grid" style="margin-top:20px">
+
+        <div class="card">
+          <h3>📅 Today's Orders</h3>
+          <div style="font-size:30px;font-weight:bold;color:#f0b34e">
+            {{ today_orders }}
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>💵 Today's Sales</h3>
+          <div style="font-size:30px;font-weight:bold;color:#f0b34e">
+            ETB {{ today_sales }}
+          </div>
+        </div>
+
+      </div>
+
+      <div class="formbox" style="margin-top:25px">
+        <div class="title">
+          <div>
+            <h2>🧾 Recent Orders</h2>
+            <p>Latest 20 customer orders</p>
+          </div>
+          <a class="btn secondary" href="/kitchen">👨‍🍳 Kitchen</a>
+        </div>
+
+        {% if recent_orders %}
+
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse">
+
+            <tr style="border-bottom:1px solid #4b3218">
+              <th style="padding:12px;text-align:left">Order</th>
+              <th style="padding:12px;text-align:left">Customer</th>
+              <th style="padding:12px;text-align:left">Table</th>
+              <th style="padding:12px;text-align:left">Items</th>
+              <th style="padding:12px;text-align:left">Total</th>
+              <th style="padding:12px;text-align:left">Status</th>
+              <th style="padding:12px;text-align:left">Date</th>
+            </tr>
+
+            {% for o in recent_orders %}
+            <tr style="border-bottom:1px solid #332619">
+
+              <td style="padding:12px">
+                #{{ o.id }}
+              </td>
+
+              <td style="padding:12px">
+                {{ o.customer }}
+              </td>
+
+              <td style="padding:12px">
+                {{ o.table_no }}
+              </td>
+
+              <td style="padding:12px">
+                {{ o.items }}
+              </td>
+
+              <td style="padding:12px;font-weight:bold;color:#f0b34e">
+                ETB {{ o.total }}
+              </td>
+
+              <td style="padding:12px">
+                <span class="status">{{ o.status }}</span>
+              </td>
+
+              <td style="padding:12px">
+                {{ o.created_at }}
+              </td>
+
+            </tr>
+            {% endfor %}
+
+          </table>
+        </div>
+
+        {% else %}
+
+        <div class="card" style="padding:30px;text-align:center">
+          <h3>No orders yet ☕</h3>
+        </div>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+    """,
+    total_orders=total_orders,
+    total_sales=total_sales,
+    new_orders=new_orders,
+    preparing_orders=preparing_orders,
+    ready_orders=ready_orders,
+    completed_orders=completed_orders,
+    today_orders=today_orders,
+    today_sales=today_sales,
+    recent_orders=recent_orders)
+
+    return page(body, "admin", "Admin Dashboard — FIKIR")
+
 @app.post("/kitchen/status")
 def kitchen_status():
     order_id = request.form.get("order_id", type=int)
