@@ -600,6 +600,17 @@ def admin():
 
       </div>
 
+        <div class="formbox" style="margin-top:25px;padding:20px">
+          <h3>🔎 Search & Filter Orders</h3>
+          <form method="get" action="/admin" style="display:flex;gap:10px;flex-wrap:wrap">
+            <input name="search" value="{{ search }}" placeholder="Order / Customer / Table" style="flex:1;min-width:180px">
+            <input type="date" name="date_from" value="{{ date_from }}">
+            <input type="date" name="date_to" value="{{ date_to }}">
+            <button class="btn" type="submit">🔍 Filter</button>
+            <a class="btn secondary" href="/admin">↻ Clear</a>
+          </form>
+        </div>
+
       <div class="formbox" style="margin-top:25px">
         <div class="title">
           <div>
