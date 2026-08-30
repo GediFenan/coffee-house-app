@@ -481,14 +481,38 @@ def admin():
     if not session.get("admin_logged_in"):
         return redirect(url_for("admin_login"))
 
+    search = request.args.get("search", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+
     conn = db()
 
+    where = []
+    params = []
+
+    if search:
+        where.append("(CAST(id AS TEXT) LIKE ? OR customer LIKE ? OR table_no LIKE ?)")
+        term = f"%{search}%"
+        params.extend([term, term, term])
+
+    if date_from:
+        where.append("date(created_at) >= date(?)")
+        params.append(date_from)
+
+    if date_to:
+        where.append("date(created_at) <= date(?)")
+        params.append(date_to)
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
     total_orders = conn.execute(
-        "SELECT COUNT(*) FROM fikir_orders"
+        "SELECT COUNT(*) FROM fikir_orders" + where_sql,
+        params
     ).fetchone()[0]
 
     total_sales = conn.execute(
-        "SELECT COALESCE(SUM(total),0) FROM fikir_orders"
+        "SELECT COALESCE(SUM(total),0) FROM fikir_orders" + where_sql,
+        params
     ).fetchone()[0]
 
     new_orders = conn.execute(
@@ -516,12 +540,12 @@ def admin():
         "WHERE date(created_at)=date('now','localtime')"
     ).fetchone()[0]
 
-    recent_orders = conn.execute("""
-        SELECT id, customer, table_no, items, total, status, created_at
-        FROM fikir_orders
-        ORDER BY id DESC
-        LIMIT 20
-    """).fetchall()
+    recent_orders = conn.execute(
+        "SELECT id, customer, table_no, items, total, status, created_at "
+        "FROM fikir_orders" + where_sql +
+        " ORDER BY id DESC LIMIT 50",
+        params
+    ).fetchall()
 
     conn.close()
 
@@ -692,7 +716,10 @@ def admin():
     completed_orders=completed_orders,
     today_orders=today_orders,
     today_sales=today_sales,
-    recent_orders=recent_orders)
+    recent_orders=recent_orders,
+    search=search,
+    date_from=date_from,
+    date_to=date_to)
 
     return page(body, "admin", "Admin Dashboard — FIKIR")
 
