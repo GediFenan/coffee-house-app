@@ -46,6 +46,69 @@ def init_db():
 
 init_db()
 
+def init_products_db():
+    conn = db()
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fikir_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            icon TEXT NOT NULL DEFAULT '☕'
+        )
+    """)
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM fikir_products"
+    ).fetchone()[0]
+
+    if count == 0:
+        for product in PRODUCTS:
+            conn.execute(
+                """
+                INSERT INTO fikir_products
+                (id, name, description, price, icon)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    product["id"],
+                    product["name"],
+                    product["desc"],
+                    product["price"],
+                    product["icon"]
+                )
+            )
+
+    conn.commit()
+    conn.close()
+
+
+def get_products():
+    conn = db()
+
+    rows = conn.execute("""
+        SELECT id, name, description, price, icon
+        FROM fikir_products
+        ORDER BY id
+    """).fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "desc": r["description"],
+            "price": r["price"],
+            "icon": r["icon"]
+        }
+        for r in rows
+    ]
+
+
+init_products_db()
+
 CSS = r"""
 :root{
   --bg:#070707; --panel:#11100e; --panel2:#171411; --gold:#d99a32;
@@ -181,15 +244,21 @@ BASE = r"""
 """
 
 def cart_data():
+    products = get_products()
     raw = session.get("cart", {})
     items, total, count = [], 0, 0
+
     for pid, qty in raw.items():
-        p = next((x for x in PRODUCTS if x["id"] == int(pid)), None)
-        if not p: continue
+        p = next((x for x in products if x["id"] == int(pid)), None)
+
+        if not p:
+            continue
+
         subtotal = p["price"] * int(qty)
         items.append({**p, "qty": int(qty), "subtotal": subtotal})
         total += subtotal
         count += int(qty)
+
     return items, total, count
 
 def page(body, page_name="home", title="FIKIR Coffee House"):
@@ -252,13 +321,21 @@ def home():
     </aside>
   </div>
 </section>
-""", products=PRODUCTS, items=cart_data()[0], total=cart_data()[1])
+""", products=get_products(), items=cart_data()[0], total=cart_data()[1])
     return page(body)
 
 @app.post("/add")
 def add():
     pid = request.form.get("product_id", type=int)
-    if not any(p["id"] == pid for p in PRODUCTS):
+
+    conn = db()
+    product = conn.execute(
+        "SELECT id FROM fikir_products WHERE id=?",
+        (pid,)
+    ).fetchone()
+    conn.close()
+
+    if not product:
         return "Invalid product", 400
     cart = session.get("cart", {})
     key = str(pid)
@@ -476,6 +553,60 @@ def admin_logout():
     session.pop("admin_logged_in", None)
     return redirect(url_for("admin_login"))
 
+@app.post("/admin/products/add")
+def admin_add_product():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+
+    name = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip()
+    icon = request.form.get("icon", "☕").strip() or "☕"
+    price = request.form.get("price", type=int)
+
+    if not name or not description or not price or price <= 0:
+        return redirect(url_for("admin"))
+
+    conn = db()
+
+    conn.execute(
+        """
+        INSERT INTO fikir_products
+        (name, description, price, icon)
+        VALUES (?, ?, ?, ?)
+        """,
+        (name, description, price, icon)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/products/price")
+def admin_update_product_price():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+
+    product_id = request.form.get("product_id", type=int)
+    price = request.form.get("price", type=int)
+
+    if not product_id or not price or price <= 0:
+        return redirect(url_for("admin"))
+
+    conn = db()
+
+    conn.execute(
+        "UPDATE fikir_products SET price=? WHERE id=?",
+        (price, product_id)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin"))
+
+
 @app.route("/admin")
 def admin():
     if not session.get("admin_logged_in"):
@@ -638,6 +769,42 @@ def admin():
       <div class="formbox" style="margin-top:25px">
         <div class="title">
           <div>
+        <div class="formbox" style="margin-top:25px">
+          <div class="title">
+            <div>
+              <h2>☕ Product Management</h2>
+              <p>Add products and edit prices</p>
+            </div>
+          </div>
+
+          <div class="card" style="padding:20px;margin-bottom:20px">
+            <h3>➕ Add Product</h3>
+            <form method="post" action="/admin/products/add" style="display:grid;gap:10px">
+              <input name="name" placeholder="Product name" required>
+              <input name="description" placeholder="Description" required>
+              <input name="price" type="number" min="1" placeholder="Price (ETB)" required>
+              <input name="icon" placeholder="Icon e.g. ☕" value="☕">
+              <button class="btn" type="submit">➕ Add Product</button>
+            </form>
+          </div>
+
+          <h3>✏️ Edit Product Prices</h3>
+
+          {% for p in products %}
+          <div class="card" style="padding:15px;margin-top:10px">
+            <form method="post" action="/admin/products/price" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:180px">
+                <b>{{ p.icon }} {{ p.name }}</b><br>
+                <small style="color:#aaa">{{ p.desc }}</small>
+              </div>
+              <input type="number" name="price" value="{{ p.price }}" min="1" required style="width:120px">
+              <input type="hidden" name="product_id" value="{{ p.id }}">
+              <button class="btn" type="submit">💾 Save Price</button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+
             <h2>🧾 Recent Orders</h2>
             <p>Latest 20 customer orders</p>
           </div>
@@ -719,7 +886,8 @@ def admin():
     recent_orders=recent_orders,
     search=search,
     date_from=date_from,
-    date_to=date_to)
+    date_to=date_to,
+    products=get_products())
 
     return page(body, "admin", "Admin Dashboard — FIKIR")
 

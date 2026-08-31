@@ -1,0 +1,4 @@
+__pycache__/
+app_backup_*.py
+app_before_*.py
+coffee_backup_*.db
