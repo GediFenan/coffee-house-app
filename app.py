@@ -88,7 +88,7 @@ def get_products():
     conn = db()
 
     rows = conn.execute("""
-        SELECT id, name, description, price, icon
+        SELECT id, name, description, price, icon, stock, low_stock
         FROM fikir_products
         ORDER BY id
     """).fetchall()
@@ -101,7 +101,9 @@ def get_products():
             "name": r["name"],
             "desc": r["description"],
             "price": r["price"],
-            "icon": r["icon"]
+            "icon": r["icon"],
+            "stock": r["stock"],
+            "low_stock": r["low_stock"]
         }
         for r in rows
     ]
@@ -330,17 +332,28 @@ def add():
 
     conn = db()
     product = conn.execute(
-        "SELECT id FROM fikir_products WHERE id=?",
+        "SELECT id, name, stock FROM fikir_products WHERE id=?",
         (pid,)
     ).fetchone()
     conn.close()
 
     if not product:
         return "Invalid product", 400
+
     cart = session.get("cart", {})
     key = str(pid)
-    cart[key] = int(cart.get(key, 0)) + 1
+    current_qty = int(cart.get(key, 0))
+    stock = int(product["stock"])
+
+    if stock <= 0:
+        return f"{product['name']} is out of stock", 400
+
+    if current_qty >= stock:
+        return f"Only {stock} of {product['name']} available", 400
+
+    cart[key] = current_qty + 1
     session["cart"] = cart
+
     return redirect(request.referrer or url_for("home"))
 
 @app.post("/remove")
@@ -402,13 +415,34 @@ def checkout():
         item_text = ", ".join(f'{x["name"]} × {x["qty"]}' for x in items)
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Save locally for the existing Kitchen Dashboard
+        # Check stock before creating the order
         conn = db()
+
+        for x in items:
+            product = conn.execute(
+                "SELECT name, stock FROM fikir_products WHERE id=?",
+                (x["id"],)
+            ).fetchone()
+
+            if not product or int(product["stock"]) < int(x["qty"]):
+                conn.close()
+                return f"Not enough stock for {x['name']}", 400
+
+        # Deduct stock
+        for x in items:
+            conn.execute(
+                "UPDATE fikir_products SET stock = stock - ? WHERE id=?",
+                (x["qty"], x["id"])
+            )
+
+        # Save locally for the existing Kitchen Dashboard
         cur = conn.execute(
             "INSERT INTO fikir_orders(customer,table_no,items,total,status,created_at) VALUES(?,?,?,?,?,?)",
             (customer, table_no, item_text, total, "NEW", created_at)
         )
         order_id = cur.lastrowid
+
+        # Commit order + stock deduction together
         conn.commit()
         conn.close()
 
@@ -601,6 +635,28 @@ def admin_update_product_price():
         (price, product_id)
     )
 
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/products/stock")
+def admin_update_product_stock():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin"))
+
+    product_id = request.form.get("product_id", type=int)
+    stock = request.form.get("stock", type=int)
+
+    if not product_id or stock is None or stock < 0:
+        return redirect(url_for("admin"))
+
+    conn = db()
+    conn.execute(
+        "UPDATE fikir_products SET stock=? WHERE id=?",
+        (stock, product_id)
+    )
     conn.commit()
     conn.close()
 
@@ -803,6 +859,63 @@ def admin():
             </form>
           </div>
           {% endfor %}
+        </div>
+
+        <div class="formbox" style="margin-top:25px">
+          <div class="title">
+            <div>
+              <h2>📦 Inventory Management</h2>
+              <p>Manage product stock and low-stock alerts</p>
+            </div>
+          </div>
+
+          {% for p in products %}
+          <div class="card" style="padding:15px;margin-top:10px">
+            <form method="post" action="/admin/products/stock"
+                  style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+
+              <div style="flex:1;min-width:200px">
+                <b>{{ p.icon }} {{ p.name }}</b><br>
+                <small style="color:#aaa">Price: ETB {{ p.price }}</small>
+              </div>
+
+              <div>
+                {% if p.stock <= p.low_stock %}
+                  <span style="color:#ff6b5f;font-weight:bold">
+                    ⚠️ LOW STOCK
+                  </span>
+                {% else %}
+                  <span style="color:#6f8f58;font-weight:bold">
+                    ✅ In Stock
+                  </span>
+                {% endif %}
+              </div>
+
+              <input type="number"
+                     name="stock"
+                     value="{{ p.stock }}"
+                     min="0"
+                     required
+                     style="width:110px">
+
+              <input type="hidden"
+                     name="product_id"
+                     value="{{ p.id }}">
+
+              <button class="btn" type="submit">
+                💾 Save Stock
+              </button>
+
+            </form>
+
+            <div style="margin-top:8px;color:#aaa;font-size:13px">
+              Current Stock: <b>{{ p.stock }}</b>
+              &nbsp; | &nbsp;
+              Low Stock Alert: <b>{{ p.low_stock }}</b>
+            </div>
+          </div>
+          {% endfor %}
+
         </div>
 
             <h2>🧾 Recent Orders</h2>
