@@ -596,8 +596,16 @@ def admin_add_product():
     description = request.form.get("description", "").strip()
     icon = request.form.get("icon", "☕").strip() or "☕"
     price = request.form.get("price", type=int)
+    stock = request.form.get("stock", type=int)
+    low_stock = request.form.get("low_stock", type=int)
 
-    if not name or not description or not price or price <= 0:
+    if (
+        not name
+        or not description
+        or not price or price <= 0
+        or stock is None or stock < 0
+        or low_stock is None or low_stock < 0
+    ):
         return redirect(url_for("admin"))
 
     conn = db()
@@ -605,10 +613,17 @@ def admin_add_product():
     conn.execute(
         """
         INSERT INTO fikir_products
-        (name, description, price, icon)
-        VALUES (?, ?, ?, ?)
+        (name, description, price, icon, stock, low_stock)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (name, description, price, icon)
+        (
+            name,
+            description,
+            price,
+            icon,
+            stock,
+            low_stock
+        )
     )
 
     conn.commit()
@@ -657,6 +672,83 @@ def admin_update_product_stock():
         "UPDATE fikir_products SET stock=? WHERE id=?",
         (stock, product_id)
     )
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin"))
+
+
+
+@app.post("/admin/products/edit")
+def admin_edit_product():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+
+    product_id = request.form.get("product_id", type=int)
+    name = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip()
+    icon = request.form.get("icon", "☕").strip() or "☕"
+    price = request.form.get("price", type=int)
+    stock = request.form.get("stock", type=int)
+    low_stock = request.form.get("low_stock", type=int)
+
+    if (
+        not product_id
+        or not name
+        or not description
+        or not price or price <= 0
+        or stock is None or stock < 0
+        or low_stock is None or low_stock < 0
+    ):
+        return redirect(url_for("admin"))
+
+    conn = db()
+
+    conn.execute(
+        """
+        UPDATE fikir_products
+        SET name=?,
+            description=?,
+            price=?,
+            icon=?,
+            stock=?,
+            low_stock=?
+        WHERE id=?
+        """,
+        (
+            name,
+            description,
+            price,
+            icon,
+            stock,
+            low_stock,
+            product_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/products/delete")
+def admin_delete_product():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+
+    product_id = request.form.get("product_id", type=int)
+
+    if not product_id:
+        return redirect(url_for("admin"))
+
+    conn = db()
+
+    conn.execute(
+        "DELETE FROM fikir_products WHERE id=?",
+        (product_id,)
+    )
+
     conn.commit()
     conn.close()
 
@@ -829,91 +921,184 @@ def admin():
           <div class="title">
             <div>
               <h2>☕ Product Management</h2>
-              <p>Add products and edit prices</p>
-            </div>
-          </div>
+          <p>Add, edit and delete coffee products</p>
 
+          <!-- ADD PRODUCT -->
           <div class="card" style="padding:20px;margin-bottom:20px">
-            <h3>➕ Add Product</h3>
-            <form method="post" action="/admin/products/add" style="display:grid;gap:10px">
-              <input name="name" placeholder="Product name" required>
-              <input name="description" placeholder="Description" required>
-              <input name="price" type="number" min="1" placeholder="Price (ETB)" required>
-              <input name="icon" placeholder="Icon e.g. ☕" value="☕">
-              <button class="btn" type="submit">➕ Add Product</button>
-            </form>
-          </div>
+            <h3>➕ Add New Product</h3>
 
-          <h3>✏️ Edit Product Prices</h3>
+            <form method="post"
+                  action="/admin/products/add"
+                  style="display:grid;gap:10px">
 
-          {% for p in products %}
-          <div class="card" style="padding:15px;margin-top:10px">
-            <form method="post" action="/admin/products/price" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <div style="flex:1;min-width:180px">
-                <b>{{ p.icon }} {{ p.name }}</b><br>
-                <small style="color:#aaa">{{ p.desc }}</small>
-              </div>
-              <input type="number" name="price" value="{{ p.price }}" min="1" required style="width:120px">
-              <input type="hidden" name="product_id" value="{{ p.id }}">
-              <button class="btn" type="submit">💾 Save Price</button>
-            </form>
-          </div>
-          {% endfor %}
-        </div>
+              <input name="name"
+                     placeholder="Product name"
+                     required>
 
-        <div class="formbox" style="margin-top:25px">
-          <div class="title">
-            <div>
-              <h2>📦 Inventory Management</h2>
-              <p>Manage product stock and low-stock alerts</p>
-            </div>
-          </div>
+              <input name="description"
+                     placeholder="Description"
+                     required>
 
-          {% for p in products %}
-          <div class="card" style="padding:15px;margin-top:10px">
-            <form method="post" action="/admin/products/stock"
-                  style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input name="price"
+                     type="number"
+                     min="1"
+                     placeholder="Price (ETB)"
+                     required>
 
-              <div style="flex:1;min-width:200px">
-                <b>{{ p.icon }} {{ p.name }}</b><br>
-                <small style="color:#aaa">Price: ETB {{ p.price }}</small>
-              </div>
-
-              <div>
-                {% if p.stock <= p.low_stock %}
-                  <span style="color:#ff6b5f;font-weight:bold">
-                    ⚠️ LOW STOCK
-                  </span>
-                {% else %}
-                  <span style="color:#6f8f58;font-weight:bold">
-                    ✅ In Stock
-                  </span>
-                {% endif %}
-              </div>
-
-              <input type="number"
-                     name="stock"
-                     value="{{ p.stock }}"
+              <input name="stock"
+                     type="number"
                      min="0"
-                     required
-                     style="width:110px">
+                     value="20"
+                     placeholder="Initial Stock"
+                     required>
 
-              <input type="hidden"
-                     name="product_id"
-                     value="{{ p.id }}">
+              <input name="low_stock"
+                     type="number"
+                     min="0"
+                     value="5"
+                     placeholder="Low Stock Alert"
+                     required>
+
+              <input name="icon"
+                     placeholder="Icon e.g. ☕"
+                     value="☕">
 
               <button class="btn" type="submit">
-                💾 Save Stock
+                ➕ Add Product
               </button>
 
             </form>
-
-            <div style="margin-top:8px;color:#aaa;font-size:13px">
-              Current Stock: <b>{{ p.stock }}</b>
-              &nbsp; | &nbsp;
-              Low Stock Alert: <b>{{ p.low_stock }}</b>
-            </div>
           </div>
+
+
+          <!-- PRODUCTS -->
+          <h3>📋 Products</h3>
+
+          {% for p in products %}
+
+          <div class="card"
+               style="padding:18px;margin-top:12px">
+
+            <div style="display:flex;
+                        justify-content:space-between;
+                        gap:15px;
+                        flex-wrap:wrap;
+                        align-items:center">
+
+              <div style="flex:1;min-width:180px">
+
+                <div style="font-size:20px;font-weight:bold">
+                  {{ p.icon }} {{ p.name }}
+                </div>
+
+                <div style="color:#aaa;margin-top:5px">
+                  {{ p.desc }}
+                </div>
+
+                <div style="margin-top:8px">
+                  <b style="color:#f0b34e">
+                    ETB {{ p.price }}
+                  </b>
+
+                  &nbsp; | &nbsp;
+
+                  📦 Stock:
+                  <b>{{ p.stock }}</b>
+
+                  &nbsp; | &nbsp;
+
+                  ⚠️ Low:
+                  <b>{{ p.low_stock }}</b>
+                </div>
+
+              </div>
+
+
+              <!-- EDIT -->
+              <details style="min-width:280px;flex:1">
+
+                <summary class="btn"
+                         style="display:inline-block;
+                                cursor:pointer">
+                  ✏️ Edit
+                </summary>
+
+                <form method="post"
+                      action="/admin/products/edit"
+                      style="display:grid;
+                             gap:8px;
+                             margin-top:12px">
+
+                  <input type="hidden"
+                         name="product_id"
+                         value="{{ p.id }}">
+
+                  <input name="name"
+                         value="{{ p.name }}"
+                         placeholder="Product name"
+                         required>
+
+                  <input name="description"
+                         value="{{ p.desc }}"
+                         placeholder="Description"
+                         required>
+
+                  <input name="price"
+                         type="number"
+                         min="1"
+                         value="{{ p.price }}"
+                         placeholder="Price"
+                         required>
+
+                  <input name="stock"
+                         type="number"
+                         min="0"
+                         value="{{ p.stock }}"
+                         placeholder="Stock"
+                         required>
+
+                  <input name="low_stock"
+                         type="number"
+                         min="0"
+                         value="{{ p.low_stock }}"
+                         placeholder="Low stock"
+                         required>
+
+                  <input name="icon"
+                         value="{{ p.icon }}"
+                         placeholder="Icon">
+
+                  <button class="btn"
+                          type="submit">
+                    💾 Save Changes
+                  </button>
+
+                </form>
+
+              </details>
+
+
+              <!-- DELETE -->
+              <form method="post"
+                    action="/admin/products/delete"
+                    onsubmit="return confirm('Delete {{ p.name }}?');">
+
+                <input type="hidden"
+                       name="product_id"
+                       value="{{ p.id }}">
+
+                <button class="btn"
+                        type="submit"
+                        style="background:#8b2f2f">
+                  🗑️ Delete
+                </button>
+
+              </form>
+
+            </div>
+
+          </div>
+
           {% endfor %}
 
         </div>
