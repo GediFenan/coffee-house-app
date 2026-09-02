@@ -206,7 +206,11 @@ footer{margin-top:50px;border-top:1px solid #3a2917;padding:25px;text-align:cent
 @media(max-width:1050px){.grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:800px){
   .navin{padding:10px 14px}.brand{min-width:auto}.brand b{font-size:22px}.brand small{font-size:9px}
-  .links{display:none}.wrap{padding:14px}.hero{padding:30px 22px;min-height:300px}
+  .links{display:none;position:absolute;top:70px;left:14px;right:14px;flex-direction:column;background:#21150c;padding:10px;border-radius:14px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+  .links.mobile-open{display:flex}
+  .links a{width:100%;box-sizing:border-box;text-align:left}
+  .mobile-menu-btn{display:block;background:#3a2612;color:#f2b44f;border:1px solid #5a3b20;border-radius:10px;padding:10px 13px;font-size:20px;cursor:pointer}
+  .wrap{padding:14px}.hero{padding:30px 22px;min-height:300px}
   .layout{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr)}.kitchen-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:500px){
@@ -230,6 +234,7 @@ BASE = r"""
   <div class="logo">☕</div>
   <div><b>FIKIR</b><small>COFFEE HOUSE</small></div>
 </a>
+<button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
 <nav class="links">
   <a href="/" class="{{ 'active' if page=='home' else '' }}">⌂ Home</a>
   <a href="/#menu">☕ Menu</a>
@@ -243,6 +248,12 @@ BASE = r"""
 {{ body|safe }}
 </div>
 <footer>☕ <b>FIKIR Coffee House</b> &nbsp;—&nbsp; Taste the Difference</footer>
+<script>
+function toggleMobileMenu(){
+  const menu = document.querySelector('.links');
+  menu.classList.toggle('mobile-open');
+}
+</script>
 </body></html>
 """
 
