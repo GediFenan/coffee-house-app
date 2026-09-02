@@ -235,6 +235,7 @@ BASE = r"""
   <a href="/#menu">☕ Menu</a>
   <a href="/cart">🛒 Cart</a>
   <a href="/kitchen">👨‍🍳 Kitchen</a>
+  <a href="/admin/login">🔐 Admin</a>
 </nav>
 <a class="cartbtn" href="/cart">🛒 <span class="badge">{{ cart_count }}</span></a>
 </div></header>
