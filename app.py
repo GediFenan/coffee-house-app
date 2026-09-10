@@ -85,14 +85,50 @@ def init_products_db():
 
 
 def get_products():
-    conn = db()
+    # Supabase is the primary product database on Render
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.get(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json"
+                },
+                params={
+                    "select": "id,name,description,price,icon,stock,low_stock",
+                    "order": "id.asc"
+                },
+                timeout=10
+            )
 
+            if r.ok:
+                rows = r.json()
+                return [
+                    {
+                        "id": x["id"],
+                        "name": x["name"],
+                        "desc": x["description"],
+                        "price": x["price"],
+                        "icon": x.get("icon") or "☕",
+                        "stock": x.get("stock", 0),
+                        "low_stock": x.get("low_stock", 5)
+                    }
+                    for x in rows
+                ]
+
+            print("Supabase products GET failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase products GET error:", e)
+
+    # Local SQLite fallback
+    conn = db()
     rows = conn.execute("""
         SELECT id, name, description, price, icon, stock, low_stock
         FROM fikir_products
         ORDER BY id
     """).fetchall()
-
     conn.close()
 
     return [
@@ -107,7 +143,6 @@ def get_products():
         }
         for r in rows
     ]
-
 
 init_products_db()
 
@@ -611,33 +646,55 @@ def admin_add_product():
     stock = request.form.get("stock", type=int)
     low_stock = request.form.get("low_stock", type=int)
 
-    if (
-        not name
-        or not description
-        or not price or price <= 0
-        or stock is None or stock < 0
-        or low_stock is None or low_stock < 0
-    ):
+    if stock is None:
+        stock = 0
+
+    if low_stock is None:
+        low_stock = 5
+
+    if not name or not description or not price or price <= 0:
         return redirect(url_for("admin"))
 
-    conn = db()
+    # Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.post(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                json={
+                    "name": name,
+                    "description": description,
+                    "price": price,
+                    "icon": icon,
+                    "stock": stock,
+                    "low_stock": low_stock
+                },
+                timeout=10
+            )
 
+            if r.ok:
+                return redirect(url_for("admin"))
+
+            print("Supabase product ADD failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase product ADD error:", e)
+
+    # SQLite fallback
+    conn = db()
     conn.execute(
         """
         INSERT INTO fikir_products
         (name, description, price, icon, stock, low_stock)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (
-            name,
-            description,
-            price,
-            icon,
-            stock,
-            low_stock
-        )
+        (name, description, price, icon, stock, low_stock)
     )
-
     conn.commit()
     conn.close()
 
@@ -655,13 +712,34 @@ def admin_update_product_price():
     if not product_id or not price or price <= 0:
         return redirect(url_for("admin"))
 
-    conn = db()
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.patch(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                params={"id": "eq." + str(product_id)},
+                json={"price": price},
+                timeout=10
+            )
 
+            if r.ok:
+                return redirect(url_for("admin"))
+
+            print("Supabase price UPDATE failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase price UPDATE error:", e)
+
+    conn = db()
     conn.execute(
         "UPDATE fikir_products SET price=? WHERE id=?",
         (price, product_id)
     )
-
     conn.commit()
     conn.close()
 
@@ -671,13 +749,36 @@ def admin_update_product_price():
 @app.post("/admin/products/stock")
 def admin_update_product_stock():
     if not session.get("admin_logged_in"):
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_login"))
 
     product_id = request.form.get("product_id", type=int)
     stock = request.form.get("stock", type=int)
 
     if not product_id or stock is None or stock < 0:
         return redirect(url_for("admin"))
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.patch(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                params={"id": "eq." + str(product_id)},
+                json={"stock": stock},
+                timeout=10
+            )
+
+            if r.ok:
+                return redirect(url_for("admin"))
+
+            print("Supabase stock UPDATE failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase stock UPDATE error:", e)
 
     conn = db()
     conn.execute(
@@ -688,7 +789,6 @@ def admin_update_product_stock():
     conn.close()
 
     return redirect(url_for("admin"))
-
 
 
 @app.post("/admin/products/edit")
@@ -704,27 +804,52 @@ def admin_edit_product():
     stock = request.form.get("stock", type=int)
     low_stock = request.form.get("low_stock", type=int)
 
-    if (
-        not product_id
-        or not name
-        or not description
-        or not price or price <= 0
-        or stock is None or stock < 0
-        or low_stock is None or low_stock < 0
-    ):
+    if not product_id or not name or not description or not price or price <= 0:
         return redirect(url_for("admin"))
 
-    conn = db()
+    if stock is None:
+        stock = 0
 
+    if low_stock is None:
+        low_stock = 5
+
+    data = {
+        "name": name,
+        "description": description,
+        "price": price,
+        "icon": icon,
+        "stock": stock,
+        "low_stock": low_stock
+    }
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.patch(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                params={"id": "eq." + str(product_id)},
+                json=data,
+                timeout=10
+            )
+
+            if r.ok:
+                return redirect(url_for("admin"))
+
+            print("Supabase product EDIT failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase product EDIT error:", e)
+
+    conn = db()
     conn.execute(
         """
         UPDATE fikir_products
-        SET name=?,
-            description=?,
-            price=?,
-            icon=?,
-            stock=?,
-            low_stock=?
+        SET name=?, description=?, price=?, icon=?, stock=?, low_stock=?
         WHERE id=?
         """,
         (
@@ -737,7 +862,6 @@ def admin_edit_product():
             product_id
         )
     )
-
     conn.commit()
     conn.close()
 
@@ -754,13 +878,33 @@ def admin_delete_product():
     if not product_id:
         return redirect(url_for("admin"))
 
-    conn = db()
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            r = requests.delete(
+                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": "Bearer " + SUPABASE_KEY,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                params={"id": "eq." + str(product_id)},
+                timeout=10
+            )
 
+            if r.ok:
+                return redirect(url_for("admin"))
+
+            print("Supabase product DELETE failed:", r.status_code, r.text)
+
+        except Exception as e:
+            print("Supabase product DELETE error:", e)
+
+    conn = db()
     conn.execute(
         "DELETE FROM fikir_products WHERE id=?",
         (product_id,)
     )
-
     conn.commit()
     conn.close()
 
