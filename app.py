@@ -344,7 +344,16 @@ BASE = r"""
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ title or "FIKIR Coffee House" }}</title>
+<title>
+<meta name="description" content="FIKIR Coffee House - Great Coffee, Good Mood, Better Together. Order online!">
+<meta name="theme-color" content="#d4af37">
+<meta property="og:title" content="FIKIR Coffee House">
+<meta property="og:description" content="Order your favorite Ethiopian coffee online">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
+{{ title or "FIKIR Coffee House" }}</title>
 <style>""" + CSS + r"""
 /* ═══════ ANIMATIONS BY FIKIR ═══════ */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -1623,6 +1632,36 @@ function printReceipt(id, customer, table, items, total, date) {
     nav a { padding: 6px 4px !important; font-size: 11px !important; }
 }
 
+
+/* ═══════ LOADING SCREEN ═══════ */
+#loading-screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #0a0805; z-index: 99999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.6s ease, visibility 0.6s;
+}
+#loading-screen.hidden { opacity: 0; visibility: hidden; }
+#loading-screen .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 42px; font-weight: 900; letter-spacing: 4px;
+    background: linear-gradient(135deg, #d4af37, #f0b34e, #d4af37);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: glow 2s ease-in-out infinite;
+}
+#loading-screen .cup {
+    font-size: 72px;
+    animation: float 1.5s ease-in-out infinite;
+    margin-bottom: 20px;
+}
+#loading-screen .subtitle {
+    color: #666; font-size: 11px; letter-spacing: 6px;
+    margin-top: 10px; text-transform: uppercase;
+}
+@keyframes glow {
+    0%,100% { filter: drop-shadow(0 0 5px rgba(212,175,55,.3)); }
+    50% { filter: drop-shadow(0 0 20px rgba(212,175,55,.7)); }
+}
 </style></head><body>');
     w.document.write('<h2>FIKIR COFFEE HOUSE</h2>');
     w.document.write('<p style="text-align:center;font-size:12px;margin:0">Taste the Difference</p>');
