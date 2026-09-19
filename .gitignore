@@ -1,4 +1,20 @@
+# Backups
+app.py.backup*
+*.backup
+
+# Sensitive
+supabase_key.txt
+.env
+
+# Logs
+*.log
+
+# Database (local)
+coffee.db
+
+# Python
 __pycache__/
-app_backup_*.py
-app_before_*.py
-coffee_backup_*.db
+*.pyc
+
+# OS
+.DS_Store
