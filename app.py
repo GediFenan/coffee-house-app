@@ -169,6 +169,13 @@ _init_database()
 
 
 
+
+
+@app.route("/assets/<path:filename>")
+def serve_asset(filename):
+    from flask import send_from_directory
+    return send_from_directory("assets", filename)
+
 def get_products():
     # Supabase is the primary product database on Render
     if False:  # Supabase disabled
@@ -333,7 +340,7 @@ footer{margin-top:50px;border-top:1px solid #3a2917;padding:25px;text-align:cent
   .layout{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,1fr)}.kitchen-grid{grid-template-columns:1fr 1fr}
 }
 @media(max-width:500px){
-  .brand .logo{width:44px;height:44px;font-size:23px}.hero h1{font-size:45px}.script{font-size:21px}
+  .brand img{width:48px;height:48px;border-radius:50%;object-fit:cover}.hero h1{font-size:45px}.script{font-size:21px}
   .grid{grid-template-columns:1fr}.kitchen-grid{grid-template-columns:1fr}.productpic{height:145px}
 }
 """
@@ -390,7 +397,7 @@ body { animation: fadeIn .6s ease-out; }
 <body>
 <header class="nav"><div class="navin">
 <a class="brand" href="/">
-  <div class="logo">☕</div>
+  <img src="/assets/logo.png" alt="FIKIR" style="width:48px;height:48px;border-radius:50%;object-fit:cover;box-shadow:0 0 15px rgba(212,175,55,.5);border:2px solid rgba(212,175,55,.3)">
   <div><b>FIKIR</b><small>COFFEE HOUSE</small></div>
 </a>
 <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
