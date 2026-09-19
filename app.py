@@ -351,15 +351,17 @@ BASE = r"""
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/favicon.png">
 <title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#d4af37">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
 <meta name="description" content="FIKIR Coffee House - Great Coffee, Good Mood, Better Together. Order online!">
 <meta name="theme-color" content="#d4af37">
 <meta property="og:title" content="FIKIR Coffee House">
 <meta property="og:description" content="Order your favorite Ethiopian coffee online">
-<meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>">
 {{ title or "FIKIR Coffee House" }}</title>
 <style>""" + CSS + r"""
 /* ═══════ ANIMATIONS BY FIKIR ═══════ */
@@ -567,6 +569,15 @@ function removeItem(id) {
         .then(function(d) { if (d.ok) location.reload(); })
         .catch(function() { location.reload(); });
 }
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js').then(function(r) {
+            console.log('SW:', r.scope);
+        }).catch(function(e) { console.log('SW fail:', e); });
+    });
+}
+
 </script>
 </body></html>
 """
@@ -2163,6 +2174,35 @@ def admin_reports_telegram():
     send_telegram(msg)
     
     return redirect(url_for("admin_reports", period=period))
+
+
+
+@app.route("/static/sw.js")
+def serve_sw():
+    from flask import send_from_directory
+    response = send_from_directory("static", "sw.js")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+@app.route("/static/manifest.json")
+def serve_manifest():
+    from flask import send_from_directory
+    response = send_from_directory("static", "manifest.json")
+    response.headers["Content-Type"] = "application/manifest+json"
+    return response
+
+@app.route("/static/logo.png")
+def serve_static_logo():
+    from flask import send_from_directory
+    return send_from_directory("static", "logo.png")
+
+
+
+@app.route("/favicon.ico")
+def favicon():
+    from flask import send_from_directory
+    return send_from_directory("static", "favicon.png", mimetype="image/png")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
