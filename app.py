@@ -108,6 +108,64 @@ def send_telegram(message):
     except Exception as e:
         print(f"Telegram error: {e}")
 
+# ═══════ AUTO-INIT DATABASE ON STARTUP ═══════
+def _init_database():
+    """Create tables + seed data if not exists"""
+    try:
+        conn = db()
+        # Create tables
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            icon TEXT NOT NULL DEFAULT '☕',
+            stock INTEGER NOT NULL DEFAULT 0,
+            low_stock INTEGER NOT NULL DEFAULT 5
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer TEXT NOT NULL,
+            table_no TEXT NOT NULL,
+            items TEXT NOT NULL,
+            total INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'NEW',
+            created_at TEXT NOT NULL
+        )""")
+        
+        # Seed products only if empty
+        cnt = conn.execute("SELECT COUNT(*) FROM fikir_products").fetchone()[0]
+        if cnt == 0:
+            seed = [
+                ("Espresso", "Strong and rich coffee", 50, "☕", 50, 5),
+                ("Cappuccino", "Smooth and creamy", 50, "☕", 50, 5),
+                ("Latte", "Rich milk coffee", 55, "🥛", 50, 5),
+                ("Americano", "Classic black coffee", 45, "☕", 50, 5),
+                ("Mocha", "Chocolate & coffee blend", 60, "🍫", 50, 5),
+                ("Caramel Macchiato", "Sweet and rich", 60, "🍮", 50, 5),
+                ("Cold Coffee", "Refreshingly cold", 55, "🧊", 50, 5),
+                ("Hot Chocolate", "Rich chocolate drink", 50, "🍫", 50, 5),
+                ("Macchiato", "Rich espresso with milk", 70, "☕", 50, 5),
+                ("ጥቁር", "ጥቁር ቡና", 300, "☕", 50, 5),
+                ("Tea", "Ethiopian traditional tea", 30, "🍵", 50, 5),
+                ("Coffee", "Steam coffee", 40, "☕", 50, 5),
+                ("Milk", "Pure milk", 50, "🥛", 50, 5),
+            ]
+            for p in seed:
+                conn.execute(
+                    "INSERT INTO fikir_products (name, description, price, icon, stock, low_stock) VALUES (?,?,?,?,?,?)", p
+                )
+        conn.commit()
+        conn.close()
+        print("[INIT] Database ready")
+    except Exception as e:
+        print("[INIT ERROR]", e)
+
+# Call on startup
+_init_database()
+
+
+
 
 
 
