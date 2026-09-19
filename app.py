@@ -353,7 +353,7 @@ BASE = r"""
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="apple-touch-icon" href="/static/favicon.png">
-<title>
+<title>FIKIR Coffee House</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#d4af37">
 <meta name="apple-mobile-web-app-capable" content="yes">
