@@ -852,36 +852,40 @@ def success():
 
 @app.route("/kitchen/login", methods=["GET", "POST"])
 def kitchen_login():
+    error = ""
     if request.method == "POST":
         password = request.form.get("password", "")
         if password == KITCHEN_PASSWORD:
             session["kitchen_logged_in"] = True
             return redirect(url_for("kitchen"))
-        return render_template_string("""
-        <div class="card" style="padding:30px;max-width:400px;margin:80px auto">
-          <h2>👨‍🍳 Kitchen Login</h2>
-          <div class="notice">❌ Incorrect password</div>
-          <form method="post">
-            <label>Password:</label>
-            <input type="password" name="password" required autofocus>
-            <button class="btn" style="width:100%">Login</button>
-          </form>
-        </div>
-        """)
-    return render_template_string("""
-    <div class="card" style="padding:30px;max-width:400px;margin:80px auto">
-      <h2>👨‍🍳 Kitchen Login</h2>
-      <p style="color:#aaa">ለሼፍ ብቻ</p>
-      <form method="post">
-        <label>Password:</label>
-        <input type="password" name="password" required autofocus>
-        <button class="btn" style="width:100%">Login</button>
-      </form>
-    </div>
-    """)
+        error = '<div style="background:#3a1a1a;border:1px solid #e74c3c;color:#ff9999;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px">Incorrect password</div>'
+    
+    body = '<div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:20px">'
+    body += '<div style="padding:35px;max-width:420px;width:100%;background:linear-gradient(135deg,#1a1410,#0a0805);border:1px solid #d4af37;border-radius:20px;box-shadow:0 20px 60px rgba(212,175,55,.2)">'
+    body += '<div style="text-align:center;margin-bottom:25px">'
+    body += '<div style="font-size:64px">CHEF</div>'
+    body += '<h2 style="color:#f0b34e;margin:10px 0 5px;font-size:24px">Kitchen Login</h2>'
+    body += '<p style="color:#888;font-size:12px;letter-spacing:2px;margin:0">FIKIR COFFEE HOUSE</p>'
+    body += '</div>'
+    body += error
+    body += '<form method="post">'
+    body += '<label style="display:block;color:#aaa;font-size:13px;margin-bottom:6px">Password</label>'
+    body += '<input type="password" name="password" required autofocus placeholder="Enter password" style="width:100%;padding:12px;background:#0a0805;border:1px solid #2a2018;color:#fff;border-radius:10px;font-size:15px;margin-bottom:18px;box-sizing:border-box">'
+    body += '<button type="submit" class="btn" style="width:100%;padding:14px;font-size:15px;font-weight:bold">Login</button>'
+    body += '</form>'
+    body += '<p style="text-align:center;color:#555;font-size:11px;margin-top:20px">For Kitchen Staff Only</p>'
+    body += '</div></div>'
+    
+    return render_template_string(BASE, body=body, page="kitchen_login", title="Kitchen Login", cart_count=cart_data()[0])
 
 
 @app.route("/kitchen/logout")
+def kitchen_logout():
+    session.pop("kitchen_logged_in", None)
+    return redirect(url_for("kitchen_login"))
+
+
+
 def kitchen_logout():
     session.pop("kitchen_logged_in", None)
     return redirect(url_for("kitchen_login"))
@@ -897,7 +901,8 @@ def kitchen():
     body = render_template_string(r"""
 <div class="title">
   <div><h2>👨‍🍳 Kitchen Dashboard</h2><p>Live customer orders</p></div>
-  <a class="btn secondary" href="/">← Customer Menu</a>
+  <a class="btn" href="/kitchen/logout" style="background:#e74c3c;color:#fff;margin-right:8px">🚪 Logout</a>
+<a class="btn secondary" href="/">← Customer Menu</a>
 </div>
 {% if orders %}
 <div class="kitchen-grid">
