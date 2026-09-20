@@ -1967,38 +1967,83 @@ def admin_reports():
     if not session.get("admin_logged_in"):
         return redirect(url_for("admin_login"))
     
-    period = request.args.get("period", "today")
     from datetime import datetime, timedelta
     now = datetime.now()
     
-    if period == "today":
-        start = now.strftime("%Y-%m-%d")
-        label = "Today"
-    elif period == "week":
-        start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-        label = "Last 7 Days"
-    elif period == "month":
-        start = (now - timedelta(days=30)).strftime("%Y-%m-%d")
-        label = "Last 30 Days"
+    # Custom date range
+    custom_from = request.args.get("from", "").strip()
+    custom_to = request.args.get("to", "").strip()
+    period = request.args.get("period", "today")
+    
+    if custom_from and custom_to:
+        start = custom_from
+        end = custom_to
+        label = f"{custom_from} → {custom_to}"
     else:
-        start = "1970-01-01"
-        label = "All Time"
+        end = now.strftime("%Y-%m-%d")
+        if period == "today":
+            start = now.strftime("%Y-%m-%d")
+            label = "Today"
+        elif period == "week":
+            start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+            label = "Last 7 Days"
+        elif period == "month":
+            start = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+            label = "Last 30 Days"
+        elif period == "year":
+            start = (now - timedelta(days=365)).strftime("%Y-%m-%d")
+            label = "Last 365 Days"
+        else:
+            start = "1970-01-01"
+            label = "All Time"
     
     conn = db()
     
     # Stats
     total_orders = conn.execute(
-        "SELECT COUNT(*) FROM fikir_orders WHERE DATE(created_at) >= ?", (start,)
+        "SELECT COUNT(*) FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?", (start, end)
     ).fetchone()[0]
     total_revenue = conn.execute(
-        "SELECT COALESCE(SUM(total),0) FROM fikir_orders WHERE DATE(created_at) >= ?", (start,)
+        "SELECT COALESCE(SUM(total),0) FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?", (start, end)
     ).fetchone()[0]
     avg_order = round(total_revenue / total_orders, 0) if total_orders else 0
+    
+    # Top customers
+    top_customers = conn.execute(
+        "SELECT customer, COUNT(*) as orders, SUM(total) as spent "
+        "FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ? "
+        "GROUP BY customer ORDER BY spent DESC LIMIT 5", (start, end)
+    ).fetchall()
+    
+    # Busiest hours
+    busiest_hours = conn.execute(
+        "SELECT substr(created_at, 12, 2) as hour, COUNT(*) as count "
+        "FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ? "
+        "GROUP BY hour ORDER BY count DESC LIMIT 5", (start, end)
+    ).fetchall()
+    
+    # Revenue by product (parse from items)
+    from collections import Counter
+    product_revenue = Counter()
+    for r in conn.execute(
+        "SELECT items, total FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?",
+        (start, end)
+    ):
+        for part in (r["items"] or "").split(","):
+            part = part.strip()
+            if "\u00d7" in part:
+                n = part.rsplit("\u00d7", 1)[0].strip()
+                try: q = int(part.rsplit("\u00d7", 1)[1].strip())
+                except: q = 1
+                product_revenue[n] += q
     
     # Top products
     from collections import Counter
     counts = Counter()
-    for r in conn.execute("SELECT items FROM fikir_orders WHERE DATE(created_at) >= ?", (start,)):
+    for r in conn.execute(
+        "SELECT items FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?",
+        (start, end)
+    ):
         for p in (r["items"] or "").split(","):
             p = p.strip()
             if "\u00d7" in p:
@@ -2011,7 +2056,8 @@ def admin_reports():
     # All orders
     orders = conn.execute(
         "SELECT id, customer, table_no, items, total, status, created_at "
-        "FROM fikir_orders WHERE DATE(created_at) >= ? ORDER BY id DESC LIMIT 100", (start,)
+        "FROM fikir_orders WHERE DATE(created_at) >= ? AND DATE(created_at) <= ? "
+        "ORDER BY id DESC LIMIT 100", (start, end)
     ).fetchall()
     conn.close()
     
@@ -2022,10 +2068,19 @@ def admin_reports():
     
     # Period buttons
     body += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'
-    for p, pl in [("today","Today"),("week","7 Days"),("month","30 Days"),("all","All Time")]:
+    for p, pl in [("today","Today"),("week","7 Days"),("month","30 Days"),("year","1 Year"),("all","All Time")]:
         active = "background:#f0b34e;color:#000" if p == period else "background:#1a1410;color:#f0b34e"
         body += '<a href="/admin/reports?period=' + p + '" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;' + active + '">' + pl + '</a>'
     body += '</div>'
+    
+    # Custom date range
+    body += '<form method="get" action="/admin/reports" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;align-items:center;background:#0a0805;border:1px solid #2a2018;border-radius:10px;padding:12px">'
+    body += '<span style="color:#aaa;font-size:12px">Custom Range:</span>'
+    body += '<input type="date" name="from" value="" style="padding:6px 10px;background:#1a1410;border:1px solid #2a2018;color:#f0b34e;border-radius:6px;font-size:12px">'
+    body += '<span style="color:#666">to</span>'
+    body += '<input type="date" name="to" value="" style="padding:6px 10px;background:#1a1410;border:1px solid #2a2018;color:#f0b34e;border-radius:6px;font-size:12px">'
+    body += '<button type="submit" style="padding:6px 14px;background:#f0b34e;color:#000;border:0;border-radius:6px;font-weight:bold;font-size:12px;cursor:pointer">Apply</button>'
+    body += '</form>'
     
     # Stats cards
     body += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:25px">'
