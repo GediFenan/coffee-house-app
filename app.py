@@ -1368,7 +1368,7 @@ def admin():
     ).fetchone()[0]
 
     recent_orders = conn.execute(
-        "SELECT id, customer, table_no, items, total, status, created_at "
+        "SELECT id, customer, table_no, items, total, status, created_at, payment_method, payment_ref, payment_status "
         "FROM fikir_orders" + where_sql +
         " ORDER BY id DESC LIMIT 50",
         params
@@ -1376,6 +1376,23 @@ def admin():
 
     
 
+    
+    
+    # ═══ Payment Stats ═══
+    try:
+        pending_payments = conn.execute(
+            "SELECT COUNT(*) FROM fikir_orders WHERE payment_status='PENDING'"
+        ).fetchone()[0]
+        paid_amount = conn.execute(
+            "SELECT COALESCE(SUM(total),0) FROM fikir_orders WHERE payment_status='PAID'"
+        ).fetchone()[0]
+        unpaid_amount = conn.execute(
+            "SELECT COALESCE(SUM(total),0) FROM fikir_orders WHERE payment_status IN ('PENDING','UNPAID')"
+        ).fetchone()[0]
+    except Exception:
+        pending_payments = 0
+        paid_amount = 0
+        unpaid_amount = 0
     conn.close()
 
     body = render_template_string(r"""
@@ -1672,6 +1689,7 @@ def admin():
               <th style="padding:12px;text-align:left">Items</th>
               <th style="padding:12px;text-align:left">Total</th>
               <th style="padding:12px;text-align:left">Status</th>
+              <th style="padding:12px;text-align:left">Payment</th>
               <th style="padding:12px;text-align:left">Date</th>
             </tr>
 
@@ -1897,6 +1915,23 @@ if (window.location.pathname.startsWith('/admin')) {
               <td style="padding:12px">
                 <span class="status">{{ o.status }}</span>
               </td>
+          <td style="padding:12px">
+            {% if o.payment_status == 'PAID' %}
+              <span style="background:#1a3a1a;color:#4caf50;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:bold">PAID</span>
+            {% elif o.payment_status == 'PENDING' %}
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="background:#3a2a1a;color:#f0b34e;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:bold">PENDING</span>
+                <div style="display:flex;gap:4px">
+                  <button onclick="verifyPayment({{ o.id }}, true)" style="background:#4caf50;color:#fff;border:0;padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;font-weight:bold">Paid</button>
+                  <button onclick="verifyPayment({{ o.id }}, false)" style="background:#e74c3c;color:#fff;border:0;padding:4px 8px;border-radius:6px;font-size:10px;cursor:pointer;font-weight:bold">Reject</button>
+                </div>
+              </div>
+            {% elif o.payment_status == 'REJECTED' %}
+              <span style="background:#3a1a1a;color:#e74c3c;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:bold">REJECTED</span>
+            {% else %}
+              <span style="color:#888;font-size:11px">UNPAID</span>
+            {% endif %}
+          </td>
 
               <td style="padding:12px">
                 {{ o.created_at }}
@@ -1932,7 +1967,7 @@ if (window.location.pathname.startsWith('/admin')) {
     search=search,
     date_from=date_from,
     date_to=date_to,
-    products=get_products())
+    products=get_products(), pending_payments=pending_payments, paid_amount=paid_amount, unpaid_amount=unpaid_amount)
 
     return page(body, "admin", "Admin Dashboard — FIKIR")
 
