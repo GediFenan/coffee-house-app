@@ -13,7 +13,14 @@ def get_supabase_headers():
     "Content-Type": "application/json"
 }
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5000")
 KITCHEN_PASSWORD = os.getenv("KITCHEN_PASSWORD", "kitchen2026")
+
+TELEBIRR_NUMBER = os.getenv("TELEBIRR_NUMBER", "0912345678")
+TELEBIRR_NAME = os.getenv("TELEBIRR_NAME", "FIKIR Coffee House")
+CBE_ACCOUNT = os.getenv("CBE_ACCOUNT", "1000123456789")
+CBE_NAME = os.getenv("CBE_NAME", "FIKIR Coffee House")
+
 from datetime import datetime
 
 app = Flask(__name__)
@@ -47,7 +54,10 @@ def init_db():
             items TEXT NOT NULL,
             total INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'NEW',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            payment_method TEXT,
+            payment_ref TEXT,
+            payment_status TEXT DEFAULT 'UNPAID'
         )
     """)
     conn.commit()
@@ -164,6 +174,27 @@ def _init_database():
 
 # Call on startup
 _init_database()
+
+
+def _migrate_db():
+    """Add payment columns to existing DB - safe migration"""
+    try:
+        conn = db()
+        for col in ["payment_method", "payment_ref", "payment_status"]:
+            try:
+                if col == "payment_status":
+                    conn.execute("ALTER TABLE fikir_orders ADD COLUMN payment_status TEXT DEFAULT 'UNPAID'")
+                else:
+                    conn.execute("ALTER TABLE fikir_orders ADD COLUMN " + col + " TEXT")
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+        print("[MIGRATE] Payment columns ready")
+    except Exception as e:
+        print("[MIGRATE ERROR]", e)
+
+_migrate_db()
 
 
 
@@ -784,7 +815,7 @@ def checkout():
         conn.commit()
         conn.close()
 
-        send_telegram(f"🛒 New Order #{order_id} - {customer} - Table {table_no} - ETB {total} - {item_text}\n\n📍 Track: https://yourdomain.com/track/{order_id}\n\n📍 Track: http://127.0.0.1:5000/track/{order_id}")
+        send_telegram(f"🛒 New Order #{order_id} - {customer} - Table {table_no} - ETB {total} - {item_text}\n\n📍 Track: {{ BASE_URL }}/track/{order_id}\n\n📍 Track: http://127.0.0.1:5000/track/{order_id}")
     # Also send the order to Supabase when Render environment variables are available
         if SUPABASE_URL and SUPABASE_KEY:
             try:
@@ -821,11 +852,28 @@ def checkout_form(items,total):
       <label>Customer Name</label><input name="customer" placeholder="Enter customer name" required>
       <label>Table Number</label><input name="table_no" placeholder="e.g. 1" required>
       <div class="notice">Order total: <b>ETB {{ total }}</b></div>
-      <button class="btn" style="width:100%">✅ PLACE ORDER</button>
+      <div style="margin-top:15px;padding:15px;background:#0a0805;border:1px solid #2a2018;border-radius:10px">
+      <p style="color:#f0b34e;font-size:13px;font-weight:bold;margin:0 0 10px">💳 Payment Method</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px;background:#1a1410;border-radius:8px;cursor:pointer">
+          <input type="radio" name="payment_method" value="telebirr" checked style="width:auto">
+          <span style="color:#fff;font-size:14px">📱 Telebirr</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:10px;background:#1a1410;border-radius:8px;cursor:pointer">
+          <input type="radio" name="payment_method" value="cbebirr" style="width:auto">
+          <span style="color:#fff;font-size:14px">🏦 CBE Birr</span>
+        </label>
+      </div>
+      <div id="payment-info" style="margin-top:12px;padding:10px;background:#2a2018;border-radius:8px;font-size:12px;color:#f0b34e">
+        <strong>Telebirr:</strong> Send ETB {{ total }} to <b>{{ telebirr_number }}</b><br>
+        Name: {{ telebirr_name }}
+      </div>
+    </div>
+    <button class="btn" style="width:100%;margin-top:15px">✅ PLACE ORDER</button>
     </form>
   </div>
 </div>
-""", items=items, total=total)
+""", items=items, total=total, telebirr_number=TELEBIRR_NUMBER, telebirr_name=TELEBIRR_NAME, cbe_account=CBE_ACCOUNT, cbe_name=CBE_NAME)
 
 @app.route("/success")
 def success():
@@ -841,7 +889,49 @@ def success():
     <p>Table: <b>{{ order.table_no }}</b></p>
     <p>Total: <b style="color:#f0b34e">ETB {{ order.total }}</b></p>
     <div class="notice">👨‍🍳 Your order has been sent to the kitchen.</div>
-    <a class="btn" href="/track/{{ order.id }}" style="background:#4caf50;color:#fff;margin-right:8px">📍 Track Order</a>
+    <div style="background:#0a0805;border:2px solid #f0b34e;border-radius:12px;padding:20px;margin-top:20px;text-align:left">
+      <h3 style="color:#f0b34e;margin:0 0 12px;font-size:16px">💳 Confirm Payment</h3>
+      <p style="color:#aaa;font-size:12px;margin:0 0 12px">After sending payment, enter the transaction ID below:</p>
+      <select id="pay-method" style="width:100%;padding:10px;background:#1a1410;border:1px solid #2a2018;color:#f0b34e;border-radius:8px;margin-bottom:10px;font-size:14px;box-sizing:border-box">
+        <option value="telebirr">📱 Telebirr</option>
+        <option value="cbebirr">🏦 CBE Birr</option>
+      </select>
+      <input type="text" id="tx-id" placeholder="Transaction ID (e.g. FT23ABC...)" style="width:100%;padding:12px;background:#1a1410;border:1px solid #2a2018;color:#fff;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
+      <button onclick="submitPayment({{ order.id }})" style="width:100%;padding:12px;background:#4caf50;color:#fff;border:0;border-radius:8px;font-weight:bold;font-size:14px;cursor:pointer">✅ Payment Sent</button>
+      <p id="pay-status" style="color:#4caf50;font-size:12px;margin:10px 0 0;text-align:center"></p>
+    </div>
+    
+    <script>
+    function submitPayment(orderId) {
+      var txId = document.getElementById('tx-id').value.trim();
+      var method = document.getElementById('pay-method').value;
+      var status = document.getElementById('pay-status');
+      if (!txId) { status.style.color='#e74c3c'; status.textContent='Please enter Transaction ID'; return; }
+      status.style.color='#f0b34e';
+      status.textContent='Submitting...';
+      var fd = new FormData();
+      fd.append('order_id', orderId);
+      fd.append('tx_id', txId);
+      fd.append('method', method);
+      fetch('/payment/confirm', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            status.style.color='#4caf50';
+            status.textContent='✅ Payment confirmed! Kitchen has been notified.';
+          } else {
+            status.style.color='#e74c3c';
+            status.textContent='Error: ' + (d.error || 'Try again');
+          }
+        })
+        .catch(function() {
+          status.style.color='#e74c3c';
+          status.textContent='Network error. Try again.';
+        });
+    }
+    </script>
+    
+    <a class="btn" href="/track/{{ order.id }}" style="background:#4caf50;color:#fff;margin-right:8px;margin-top:15px">📍 Track Order</a>
         <a class="btn" href="/">🔄 New Order</a>
   </div>
 </div>
@@ -2166,7 +2256,7 @@ def admin_reports():
     # Orders table
     body += '<h3 style="color:#f0b34e;margin:20px 0 15px">\U0001f4cb Orders (' + str(len(orders)) + ')</h3>'
     body += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-    body += '<tr style="background:#1a1410;color:#f0b34e"><th style="padding:8px;text-align:left">#</th><th style="padding:8px;text-align:left">Customer</th><th style="padding:8px;text-align:left">Table</th><th style="padding:8px;text-align:left">Items</th><th style="padding:8px;text-align:right">Total</th><th style="padding:8px;text-align:left">Status</th><th style="padding:8px;text-align:left">Date</th></tr>'
+    body += '<tr style="background:#1a1410;color:#f0b34e"><th style="padding:8px;text-align:left">#</th><th style="padding:8px;text-align:left">Customer</th><th style="padding:8px;text-align:left">Table</th><th style="padding:8px;text-align:left">Items</th><th style="padding:8px;text-align:right">Total</th><th style="padding:8px;text-align:left">Status</th><th style="padding:8px;text-align:left">Payment</th><th style="padding:8px;text-align:left">Date</th></tr>'
     for o in orders:
         body += '<tr style="border-bottom:1px solid #1a1410">'
         body += '<td style="padding:8px;color:#aaa">#' + str(o["id"]) + '</td>'
@@ -2305,6 +2395,59 @@ def serve_static_logo():
 def favicon():
     from flask import send_from_directory
     return send_from_directory("static", "favicon.png", mimetype="image/png")
+
+
+
+# ═══════ PAYMENT VERIFICATION ROUTE ═══════
+
+@app.route("/payment/confirm", methods=["POST"])
+def payment_confirm():
+    order_id = request.form.get("order_id", type=int)
+    tx_id = request.form.get("tx_id", "").strip()
+    method = request.form.get("method", "telebirr").strip()
+    
+    if not order_id or not tx_id:
+        return jsonify({"ok": False, "error": "Missing fields"}), 400
+    
+    conn = db()
+    order = conn.execute("SELECT * FROM fikir_orders WHERE id=?", (order_id,)).fetchone()
+    if not order:
+        conn.close()
+        return jsonify({"ok": False, "error": "Order not found"}), 404
+    
+    conn.execute(
+        "UPDATE fikir_orders SET payment_method=?, payment_ref=?, payment_status='PENDING' WHERE id=?",
+        (method, tx_id, order_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    method_name = "Telebirr" if method == "telebirr" else "CBE Birr"
+    send_telegram(
+        "PAYMENT RECEIVED\n"
+        "Order #" + str(order_id) + "\n"
+        "Customer: " + str(order["customer"]) + "\n"
+        "Method: " + method_name + "\n"
+        "Amount: ETB " + str(order["total"]) + "\n"
+        "Ref: " + tx_id
+    )
+    
+    return jsonify({"ok": True})
+
+
+
+@app.route("/admin/mark-paid", methods=["POST"])
+def admin_mark_paid():
+    if not session.get("admin_logged_in"):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    order_id = request.form.get("order_id", type=int)
+    if not order_id:
+        return jsonify({"ok": False, "error": "invalid"}), 400
+    conn = db()
+    conn.execute("UPDATE fikir_orders SET payment_status='PAID' WHERE id=?", (order_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
