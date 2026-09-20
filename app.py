@@ -13,6 +13,7 @@ def get_supabase_headers():
     "Content-Type": "application/json"
 }
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+KITCHEN_PASSWORD = os.getenv("KITCHEN_PASSWORD", "kitchen2026")
 from datetime import datetime
 
 app = Flask(__name__)
@@ -847,8 +848,49 @@ def success():
 """, order=order)
     return page(body)
 
+
+
+@app.route("/kitchen/login", methods=["GET", "POST"])
+def kitchen_login():
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == KITCHEN_PASSWORD:
+            session["kitchen_logged_in"] = True
+            return redirect(url_for("kitchen"))
+        return render_template_string("""
+        <div class="card" style="padding:30px;max-width:400px;margin:80px auto">
+          <h2>👨‍🍳 Kitchen Login</h2>
+          <div class="notice">❌ Incorrect password</div>
+          <form method="post">
+            <label>Password:</label>
+            <input type="password" name="password" required autofocus>
+            <button class="btn" style="width:100%">Login</button>
+          </form>
+        </div>
+        """)
+    return render_template_string("""
+    <div class="card" style="padding:30px;max-width:400px;margin:80px auto">
+      <h2>👨‍🍳 Kitchen Login</h2>
+      <p style="color:#aaa">ለሼፍ ብቻ</p>
+      <form method="post">
+        <label>Password:</label>
+        <input type="password" name="password" required autofocus>
+        <button class="btn" style="width:100%">Login</button>
+      </form>
+    </div>
+    """)
+
+
+@app.route("/kitchen/logout")
+def kitchen_logout():
+    session.pop("kitchen_logged_in", None)
+    return redirect(url_for("kitchen_login"))
+
+
 @app.route("/kitchen")
 def kitchen():
+    if not session.get("kitchen_logged_in"):
+        return redirect(url_for("kitchen_login"))
     conn=db()
     orders=conn.execute("SELECT * FROM fikir_orders ORDER BY id DESC").fetchall()
     conn.close()
