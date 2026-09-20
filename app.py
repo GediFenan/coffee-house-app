@@ -15,6 +15,7 @@ def get_supabase_headers():
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5000")
 KITCHEN_PASSWORD = os.getenv("KITCHEN_PASSWORD", "kitchen2026")
+WAITER_PASSWORD = os.getenv("WAITER_PASSWORD", "waiter2026")
 
 TELEBIRR_NUMBER = os.getenv("TELEBIRR_NUMBER", "0912345678")
 TELEBIRR_NAME = os.getenv("TELEBIRR_NAME", "FIKIR Coffee House")
@@ -440,6 +441,7 @@ body { animation: fadeIn .6s ease-out; }
   <a href="/#menu">☕ Menu</a>
   <a href="/cart">🛒 Cart</a>
   <a href="/kitchen">👨‍🍳 Kitchen</a>
+  <a href="/waiter/login">🍽️ Waiter</a>
   <a href="/admin/login">🔐 Admin</a>
 </nav>
 <a class="cartbtn" href="/cart">🛒 <span class="badge">{{ cart_count }}</span></a>
@@ -2478,6 +2480,284 @@ def admin_mark_paid():
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+
+# ═══════ WAITER MODE ═══════
+
+@app.route("/waiter/login", methods=["GET", "POST"])
+def waiter_login():
+    error = ""
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == WAITER_PASSWORD:
+            session["waiter_logged_in"] = True
+            return redirect(url_for("waiter_dashboard"))
+        error = '<div style="background:#3a1a1a;border:1px solid #e74c3c;color:#ff9999;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px">Incorrect password</div>'
+    
+    body = '<div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:20px">'
+    body += '<div style="padding:35px;max-width:420px;width:100%;background:linear-gradient(135deg,#1a1410,#0a0805);border:1px solid #d4af37;border-radius:20px;box-shadow:0 20px 60px rgba(212,175,55,.2)">'
+    body += '<div style="text-align:center;margin-bottom:25px">'
+    body += '<div style="font-size:64px">WAITER</div>'
+    body += '<h2 style="color:#f0b34e;margin:10px 0 5px;font-size:24px">Waiter Login</h2>'
+    body += '<p style="color:#888;font-size:12px;letter-spacing:2px;margin:0">FIKIR COFFEE HOUSE</p>'
+    body += '</div>'
+    body += error
+    body += '<form method="post">'
+    body += '<label style="display:block;color:#aaa;font-size:13px;margin-bottom:6px">Password</label>'
+    body += '<input type="password" name="password" required autofocus placeholder="Enter waiter password" style="width:100%;padding:12px;background:#0a0805;border:1px solid #2a2018;color:#fff;border-radius:10px;font-size:15px;margin-bottom:18px;box-sizing:border-box">'
+    body += '<button type="submit" class="btn" style="width:100%;padding:14px;font-size:15px;font-weight:bold">Login</button>'
+    body += '</form>'
+    body += '<p style="text-align:center;color:#555;font-size:11px;margin-top:20px">Waiters Only</p>'
+    body += '</div></div>'
+    
+    return render_template_string(BASE, body=body, page="waiter_login", title="Waiter Login", cart_count=cart_data()[0])
+
+
+@app.route("/waiter/logout")
+def waiter_logout():
+    session.pop("waiter_logged_in", None)
+    session.pop("waiter_table", None)
+    session.pop("waiter_cart", None)
+    return redirect(url_for("waiter_login"))
+
+
+@app.route("/waiter")
+def waiter_dashboard():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    
+    body = '<div class="formbox" style="padding:25px">'
+    body += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    body += '<div><h1 style="color:#f0b34e;margin:0">Waiter Dashboard</h1>'
+    body += '<p style="color:#aaa;margin:5px 0 0;font-size:13px">Select a table to take order</p></div>'
+    body += '<a class="btn" href="/waiter/logout" style="background:#e74c3c;color:#fff">Logout</a>'
+    body += '</div>'
+    
+    # Table grid 1-20
+    body += '<h3 style="color:#f0b34e;margin:20px 0 15px">Select Table</h3>'
+    body += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:12px">'
+    for i in range(1, 21):
+        body += '<a href="/waiter/table/' + str(i) + '" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 10px;background:#0a0805;border:2px solid #2a2018;border-radius:12px;text-decoration:none;transition:all .3s">'
+        body += '<div style="font-size:32px;margin-bottom:5px">TABLE</div>'
+        body += '<div style="color:#f0b34e;font-size:24px;font-weight:bold">' + str(i) + '</div>'
+        body += '</a>'
+    body += '</div>'
+    
+    body += '</div>'
+    
+    return render_template_string(BASE, body=body, page="waiter_dashboard", title="Waiter", cart_count=cart_data()[0])
+
+
+@app.route("/waiter/table/<int:table_no>")
+def waiter_table(table_no):
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    
+    session["waiter_table"] = table_no
+    session["waiter_cart"] = {}  # Reset cart for new table
+    
+    return redirect(url_for("waiter_menu"))
+
+
+@app.route("/waiter/menu")
+def waiter_menu():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    
+    table_no = session.get("waiter_table")
+    if not table_no:
+        return redirect(url_for("waiter_dashboard"))
+    
+    cart = session.get("waiter_cart", {})
+    products = get_products()
+    cart_count = sum(cart.values())
+    
+    body = '<div class="formbox" style="padding:25px">'
+    body += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">'
+    body += '<div><h1 style="color:#f0b34e;margin:0">Table ' + str(table_no) + '</h1>'
+    body += '<p style="color:#aaa;margin:5px 0 0;font-size:13px">Tap items to add to cart</p></div>'
+    body += '<div style="display:flex;gap:8px">'
+    body += '<a class="btn" href="/waiter/cart" style="background:#4caf50;color:#fff">Cart (' + str(cart_count) + ')</a>'
+    body += '<a class="btn secondary" href="/waiter">Change Table</a>'
+    body += '</div>'
+    body += '</div>'
+    
+    body += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">'
+    for p in products:
+        qty = cart.get(str(p["id"]), 0)
+        border = "2px solid #4caf50" if qty > 0 else "2px solid #2a2018"
+        body += '<form method="post" action="/waiter/add" style="display:contents">'
+        body += '<input type="hidden" name="product_id" value="' + str(p["id"]) + '">'
+        body += '<button type="submit" style="padding:15px 10px;background:#0a0805;border:' + border + ';border-radius:12px;text-align:center;cursor:pointer;transition:all .3s;color:inherit">'
+        body += '<div style="font-size:36px;margin-bottom:8px">' + (p.get("icon") or "CUP") + '</div>'
+        body += '<div style="color:#fff;font-weight:bold;font-size:14px;margin-bottom:4px">' + p["name"] + '</div>'
+        body += '<div style="color:#f0b34e;font-weight:bold;font-size:16px">ETB ' + str(p["price"]) + '</div>'
+        if qty > 0:
+            body += '<div style="background:#4caf50;color:#fff;padding:3px 8px;border-radius:10px;font-size:12px;margin-top:6px;font-weight:bold">x' + str(qty) + '</div>'
+        body += '</button>'
+        body += '</form>'
+    body += '</div>'
+    body += '</div>'
+    
+    return render_template_string(BASE, body=body, page="waiter_menu", title="Table " + str(table_no), cart_count=cart_count)
+
+
+@app.route("/waiter/add", methods=["POST"])
+def waiter_add():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    pid = request.form.get("product_id", type=int)
+    if not pid:
+        return redirect(url_for("waiter_menu"))
+    cart = session.get("waiter_cart", {})
+    key = str(pid)
+    cart[key] = int(cart.get(key, 0)) + 1
+    session["waiter_cart"] = cart
+    return redirect(url_for("waiter_menu"))
+
+
+@app.route("/waiter/remove", methods=["POST"])
+def waiter_remove():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    pid = request.form.get("product_id", type=int)
+    cart = session.get("waiter_cart", {})
+    if pid and str(pid) in cart:
+        del cart[str(pid)]
+    session["waiter_cart"] = cart
+    return redirect(url_for("waiter_cart"))
+
+
+@app.route("/waiter/cart")
+def waiter_cart():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    table_no = session.get("waiter_table")
+    if not table_no:
+        return redirect(url_for("waiter_dashboard"))
+    
+    cart = session.get("waiter_cart", {})
+    products = get_products()
+    pmap = {str(p["id"]): p for p in products}
+    
+    items = []
+    total = 0
+    for pid, qty in cart.items():
+        if pid in pmap:
+            p = pmap[pid]
+            sub = p["price"] * qty
+            total += sub
+            items.append({"id": pid, "name": p["name"], "price": p["price"], "qty": qty, "icon": p.get("icon") or "CUP", "subtotal": sub})
+    
+    body = '<div class="formbox" style="padding:25px">'
+    body += '<h1 style="color:#f0b34e;margin:0 0 5px">Table ' + str(table_no) + ' Cart</h1>'
+    body += '<p style="color:#aaa;margin:0 0 20px;font-size:13px">Review order before sending to kitchen</p>'
+    
+    if not items:
+        body += '<div style="text-align:center;padding:40px;color:#888">'
+        body += '<div style="font-size:48px;margin-bottom:10px">CART</div>'
+        body += '<p>Cart is empty</p>'
+        body += '<a class="btn" href="/waiter/menu">Add Items</a>'
+        body += '</div>'
+    else:
+        for it in items:
+            body += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:#0a0805;border:1px solid #2a2018;border-radius:10px;margin-bottom:8px">'
+            body += '<div style="font-size:28px">' + it["icon"] + '</div>'
+            body += '<div style="flex:1"><div style="color:#fff;font-weight:bold">' + it["name"] + '</div>'
+            body += '<div style="color:#aaa;font-size:12px">ETB ' + str(it["price"]) + ' each</div></div>'
+            body += '<div style="color:#f0b34e;font-weight:bold;font-size:18px;margin-right:10px">x' + str(it["qty"]) + '</div>'
+            body += '<div style="color:#f0b34e;font-weight:bold;min-width:70px;text-align:right">ETB ' + str(it["subtotal"]) + '</div>'
+            body += '<form method="post" action="/waiter/remove" style="margin:0">'
+            body += '<input type="hidden" name="product_id" value="' + it["id"] + '">'
+            body += '<button type="submit" style="background:transparent;border:0;color:#e74c3c;font-size:20px;cursor:pointer;padding:4px">X</button>'
+            body += '</form>'
+            body += '</div>'
+        
+        body += '<div style="display:flex;justify-content:space-between;padding:15px;background:#1a1410;border-radius:10px;margin:15px 0;font-size:20px;font-weight:bold">'
+        body += '<span style="color:#aaa">TOTAL:</span>'
+        body += '<span style="color:#f0b34e">ETB ' + str(total) + '</span>'
+        body += '</div>'
+        
+        body += '<form method="post" action="/waiter/place-order">'
+        body += '<button type="submit" class="btn" style="width:100%;padding:16px;font-size:16px;font-weight:bold;background:#4caf50;color:#fff">Send to Kitchen</button>'
+        body += '</form>'
+        
+        body += '<div style="display:flex;gap:8px;margin-top:10px">'
+        body += '<a class="btn secondary" href="/waiter/menu" style="flex:1;text-align:center">Add More</a>'
+        body += '<a class="btn secondary" href="/waiter" style="flex:1;text-align:center">Change Table</a>'
+        body += '</div>'
+    
+    body += '</div>'
+    
+    return render_template_string(BASE, body=body, page="waiter_cart", title="Cart", cart_count=len(cart))
+
+
+@app.route("/waiter/place-order", methods=["POST"])
+def waiter_place_order():
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    table_no = session.get("waiter_table")
+    if not table_no:
+        return redirect(url_for("waiter_dashboard"))
+    
+    cart = session.get("waiter_cart", {})
+    if not cart:
+        return redirect(url_for("waiter_cart"))
+    
+    products = get_products()
+    pmap = {str(p["id"]): p for p in products}
+    
+    items = []
+    total = 0
+    for pid, qty in cart.items():
+        if pid in pmap:
+            p = pmap[pid]
+            sub = p["price"] * qty
+            total += sub
+            items.append(p["name"] + " x " + str(qty))
+    
+    item_text = ", ".join(items)
+    customer = "Waiter"
+    created_at = __import__('datetime').datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO fikir_orders (customer, table_no, items, total, status, created_at) VALUES (?,?,?,?,?,?)",
+        (customer, str(table_no), item_text, total, "NEW", created_at)
+    )
+    order_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    
+    # Send notification
+    try:
+        send_telegram("NEW ORDER #" + str(order_id) + " - Table " + str(table_no) + " - ETB " + str(total) + " - " + item_text)
+    except Exception:
+        pass
+    
+    session["waiter_cart"] = {}
+    
+    return redirect(url_for("waiter_success", order_id=order_id))
+
+
+@app.route("/waiter/success/<int:order_id>")
+def waiter_success(order_id):
+    if not session.get("waiter_logged_in"):
+        return redirect(url_for("waiter_login"))
+    
+    body = '<div class="formbox" style="padding:30px;text-align:center;max-width:500px;margin:50px auto">'
+    body += '<div style="font-size:64px;margin-bottom:15px">OK</div>'
+    body += '<h1 style="color:#4caf50;margin:0 0 10px">Order Sent!</h1>'
+    body += '<p style="color:#f0b34e;font-size:20px;font-weight:bold;margin:10px 0">Order #' + str(order_id) + '</p>'
+    body += '<p style="color:#aaa;margin:15px 0">Kitchen has been notified</p>'
+    body += '<div style="display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap">'
+    body += '<a class="btn" href="/waiter" style="background:#4caf50;color:#fff">New Table</a>'
+    body += '<a class="btn secondary" href="/waiter/menu">Same Table</a>'
+    body += '</div>'
+    body += '</div>'
+    
+    return render_template_string(BASE, body=body, page="waiter_success", title="Order Sent", cart_count=0)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
