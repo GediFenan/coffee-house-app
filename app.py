@@ -2595,5 +2595,63 @@ def waiter_success(order_id):
     
     return render_template_string(BASE, body=body, page="waiter_success", title="Order Sent", cart_count=0)
 
+
+
+def _init_sqlite():
+    """Create tables if using SQLite fallback"""
+    if SUPABASE_URL and SUPABASE_KEY:
+        return  # Skip - using Supabase
+    try:
+        conn = sqlite3.connect("coffee.db")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            icon TEXT NOT NULL DEFAULT 'CUP',
+            stock INTEGER NOT NULL DEFAULT 0,
+            low_stock INTEGER NOT NULL DEFAULT 5
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer TEXT NOT NULL,
+            table_no TEXT NOT NULL,
+            items TEXT NOT NULL,
+            total INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'NEW',
+            created_at TEXT NOT NULL,
+            payment_method TEXT,
+            payment_ref TEXT,
+            payment_status TEXT DEFAULT 'UNPAID'
+        )""")
+        # Seed only if empty
+        cnt = conn.execute("SELECT COUNT(*) FROM fikir_products").fetchone()[0]
+        if cnt == 0:
+            seed = [
+                ("Espresso", "Strong and rich coffee", 50, "☕", 50, 5),
+                ("Cappuccino", "Smooth and creamy", 50, "☕", 50, 5),
+                ("Latte", "Rich milk coffee", 55, "🥛", 50, 5),
+                ("Americano", "Classic black coffee", 45, "☕", 50, 5),
+                ("Mocha", "Chocolate & coffee blend", 60, "🍫", 50, 5),
+                ("Caramel Macchiato", "Sweet and rich", 60, "🍮", 50, 5),
+                ("Cold Coffee", "Refreshingly cold", 55, "🧊", 50, 5),
+                ("Hot Chocolate", "Rich chocolate drink", 50, "🍫", 50, 5),
+                ("Macchiato", "Rich espresso with milk", 70, "☕", 50, 5),
+                ("ጥቁር", "ጥቁር ቡና", 300, "☕", 50, 5),
+                ("Tea", "Ethiopian traditional tea", 30, "🍵", 50, 5),
+                ("Coffee", "Steam coffee", 40, "☕", 50, 5),
+                ("Milk", "Pure milk", 50, "🥛", 50, 5),
+            ]
+            for p in seed:
+                conn.execute("INSERT INTO fikir_products (name, description, price, icon, stock, low_stock) VALUES (?,?,?,?,?,?)", p)
+        conn.commit()
+        conn.close()
+        print("[INIT] SQLite ready")
+    except Exception as e:
+        print("[INIT ERROR]", e)
+
+# Call on startup
+_init_sqlite()
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
