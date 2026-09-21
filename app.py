@@ -1110,27 +1110,6 @@ def admin_update_product_price():
     if not product_id or not price or price <= 0:
         return redirect(url_for("admin"))
 
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            r = requests.patch(
-                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
-                headers={
-                    **get_supabase_headers(),
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                params={"id": "eq." + str(product_id)},
-                json={"price": price},
-                timeout=10
-            )
-
-            if r.ok:
-                return redirect(url_for("admin"))
-
-            print("Supabase price UPDATE failed:", r.status_code, r.text)
-
-        except Exception as e:
-            print("Supabase price UPDATE error:", e)
 
     conn = db()
     conn.execute(
@@ -1154,27 +1133,6 @@ def admin_update_product_stock():
     if not product_id or stock is None or stock < 0:
         return redirect(url_for("admin"))
 
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            r = requests.patch(
-                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
-                headers={
-                    **get_supabase_headers(),
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                params={"id": "eq." + str(product_id)},
-                json={"stock": stock},
-                timeout=10
-            )
-
-            if r.ok:
-                return redirect(url_for("admin"))
-
-            print("Supabase stock UPDATE failed:", r.status_code, r.text)
-
-        except Exception as e:
-            print("Supabase stock UPDATE error:", e)
 
     conn = db()
     conn.execute(
@@ -1218,27 +1176,6 @@ def admin_edit_product():
         "low_stock": low_stock
     }
 
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            r = requests.patch(
-                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
-                headers={
-                    **get_supabase_headers(),
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                params={"id": "eq." + str(product_id)},
-                json=data,
-                timeout=10
-            )
-
-            if r.ok:
-                return redirect(url_for("admin"))
-
-            print("Supabase product EDIT failed:", r.status_code, r.text)
-
-        except Exception as e:
-            print("Supabase product EDIT error:", e)
 
     conn = db()
     conn.execute(
