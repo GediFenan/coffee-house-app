@@ -1272,28 +1272,6 @@ def admin_delete_product():
 
     if not product_id:
         return redirect(url_for("admin"))
-
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            r = requests.delete(
-                SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_products",
-                headers={
-                    **get_supabase_headers(),
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                params={"id": "eq." + str(product_id)},
-                timeout=10
-            )
-
-            if r.ok:
-                return redirect(url_for("admin"))
-
-            print("Supabase product DELETE failed:", r.status_code, r.text)
-
-        except Exception as e:
-            print("Supabase product DELETE error:", e)
-
     conn = db()
     conn.execute(
         "DELETE FROM fikir_products WHERE id=?",
