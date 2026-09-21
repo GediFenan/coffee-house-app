@@ -2,6 +2,12 @@ from flask import Flask, request, redirect, url_for, session, render_template_st
 import os
 import requests
 import sqlite3
+
+import os as _os
+print("[DEBUG] SUPABASE_URL:", bool(_os.getenv("SUPABASE_URL")))
+print("[DEBUG] SUPABASE_KEY:", bool(_os.getenv("SUPABASE_KEY")))
+print("[DEBUG] URL value:", _os.getenv("SUPABASE_URL", "NOT SET")[:30])
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
