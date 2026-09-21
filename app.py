@@ -8,8 +8,8 @@ print("[DEBUG] SUPABASE_URL:", bool(_os.getenv("SUPABASE_URL")))
 print("[DEBUG] SUPABASE_KEY:", bool(_os.getenv("SUPABASE_KEY")))
 print("[DEBUG] URL value:", _os.getenv("SUPABASE_URL", "NOT SET")[:30])
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_URL = "https://skswircyorzpbcioljcs.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrc3dpcmN5b3J6cGJjaW9samNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjMyMzQsImV4cCI6MjEwMzQ5OTIzNH0.ntS52ih33wprDiQ4YGrNzWchuuWqfzc1iyv7_xi_qPM"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 def get_supabase_headers():
