@@ -10,6 +10,16 @@ print("[DEBUG] URL value:", _os.getenv("SUPABASE_URL", "NOT SET")[:30])
 
 SUPABASE_URL = "https://skswircyorzpbcioljcs.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrc3dpcmN5b3J6cGJjaW9samNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjMyMzQsImV4cCI6MjEwMzQ5OTIzNH0.ntS52ih33wprDiQ4YGrNzWchuuWqfzc1iyv7_xi_qPM"
+
+# Force delete old coffee.db on startup (if using Supabase)
+import os as _os
+if SUPABASE_URL and SUPABASE_KEY and _os.path.exists("coffee.db"):
+    try:
+        _os.remove("coffee.db")
+        print("[CLEANUP] Removed old coffee.db - using Supabase")
+    except Exception as _e:
+        print("[CLEANUP ERROR]", _e)
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 def get_supabase_headers():
@@ -2658,6 +2668,21 @@ def _init_sqlite():
 
 # Call on startup
 _init_sqlite()
+
+
+
+@app.route("/debug-env")
+def debug_env():
+    import os
+    return jsonify({
+        "SUPABASE_URL_set": bool(SUPABASE_URL),
+        "SUPABASE_KEY_set": bool(SUPABASE_KEY),
+        "SUPABASE_URL_value": SUPABASE_URL[:40] if SUPABASE_URL else "EMPTY",
+        "SUPABASE_KEY_length": len(SUPABASE_KEY) if SUPABASE_KEY else 0,
+        "db_type": type(db()).__name__,
+        "coffee_db_exists": os.path.exists("coffee.db"),
+        "coffee_db_size": os.path.getsize("coffee.db") if os.path.exists("coffee.db") else 0
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
