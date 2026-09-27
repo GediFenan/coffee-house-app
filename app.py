@@ -11,14 +11,192 @@ print("[DEBUG] URL value:", _os.getenv("SUPABASE_URL", "NOT SET")[:30])
 SUPABASE_URL = "https://skswircyorzpbcioljcs.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrc3dpcmN5b3J6cGJjaW9samNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjMyMzQsImV4cCI6MjEwMzQ5OTIzNH0.ntS52ih33wprDiQ4YGrNzWchuuWqfzc1iyv7_xi_qPM"
 
-# Force delete old coffee.db on startup (if using Supabase)
-import os as _os
-if SUPABASE_URL and SUPABASE_KEY and _os.path.exists("coffee.db"):
+
+# ═══════ SUPABASE SQL WRAPPER ═══════
+import re as _re
+
+class _SupabaseRow(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return list(self.values())[key]
+        return super().__getitem__(key)
+
+class _SupabaseCursor:
+    def __init__(self, url, key):
+        self.url = url.rstrip('/')
+        self.key = key
+        self._rows = []
+    def _headers(self, extra=None):
+        h = {'apikey': self.key, 'Authorization': 'Bearer ' + self.key,
+             'Content-Type': 'application/json', 'Prefer': 'return=representation'}
+        if extra: h.update(extra)
+        return h
+    def execute(self, sql, params=()):
+        sql = ' '.join(sql.split())
+        up = sql.upper().strip()
+        params = list(params) if isinstance(params, (list, tuple)) else ([params] if params else [])
+        if up.startswith('SELECT'): self._sel(sql, params)
+        elif up.startswith('INSERT'): self._ins(sql, params)
+        elif up.startswith('UPDATE'): self._upd(sql, params)
+        elif up.startswith('DELETE'): self._del(sql, params)
+        return self
+    def _sel(self, sql, params):
+        m = _re.search(r'FROM\s+(\w+)', sql, _re.IGNORECASE)
+        if not m: return
+        table = m.group(1)
+        if 'COUNT(*)' in sql.upper():
+            try:
+                r = requests.get(self.url + '/rest/v1/' + table + '?select=id',
+                    headers=self._headers({'Prefer': 'count=exact', 'Range': '0-0'}), timeout=10)
+                cnt = 0
+                cr = r.headers.get('content-range', '')
+                if '/' in cr:
+                    try: cnt = int(cr.split('/')[1])
+                    except: cnt = 0
+                self._rows = [_SupabaseRow({'count': cnt})]
+            except: self._rows = [_SupabaseRow({'count': 0})]
+            return
+        fields = '*'
+        fm = _re.search(r'SELECT\s+(.+?)\s+FROM', sql, _re.IGNORECASE)
+        if fm and fm.group(1).strip() != '*':
+            fields = ','.join(x.strip().split()[0] for x in fm.group(1).split(',') if x.strip())
+        url = self.url + '/rest/v1/' + table + '?select=' + fields
+        wm = _re.search(r'WHERE\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)', sql, _re.IGNORECASE)
+        if wm:
+            for cond in _re.split(r'\s+AND\s+', wm.group(1), flags=_re.IGNORECASE):
+                cond = cond.strip()
+                lm = _re.match(r'(\w+)\s+LIKE\s+(.+)$', cond, _re.IGNORECASE)
+                if lm:
+                    v = lm.group(2).strip().strip('%').strip("'").strip('"')
+                    url += '&' + lm.group(1) + '=like.*' + v + '*'
+                    continue
+                em = _re.match(r'(\w+)\s*=\s*(.+)$', cond)
+                if em:
+                    v = em.group(2).strip()
+                    if v == '?': v = params.pop(0) if params else None
+                    else: v = v.strip("'").strip('"')
+                    url += '&' + em.group(1) + '=eq.' + str(v)
+        om = _re.search(r'ORDER\s+BY\s+(\w+)\s*(ASC|DESC)?', sql, _re.IGNORECASE)
+        if om: url += '&order=' + om.group(1) + '.' + (om.group(2) or 'ASC').lower()
+        lmt = _re.search(r'LIMIT\s+(\d+)', sql, _re.IGNORECASE)
+        if lmt: url += '&limit=' + lmt.group(1)
+        try:
+            r = requests.get(url, headers=self._headers(), timeout=10)
+            if r.ok: self._rows = [_SupabaseRow(x) for x in r.json()]
+        except: self._rows = []
+    def _ins(self, sql, params):
+        m = _re.search(r'INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)', sql, _re.IGNORECASE)
+        if not m: return
+        table = m.group(1)
+        cols = [c.strip() for c in m.group(2).split(',')]
+        data = {col: params[i] if i < len(params) else None for i, col in enumerate(cols)}
+        try:
+            r = requests.post(self.url + '/rest/v1/' + table, json=data,
+                headers=self._headers(), timeout=10)
+            if r.ok and r.text:
+                res = r.json()
+                if isinstance(res, list) and res: self._rows = [_SupabaseRow(res[0])]
+        except Exception as e: print('INSERT err:', e)
+    def _upd(self, sql, params):
+        m = _re.search(r'UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$', sql, _re.IGNORECASE)
+        if not m: return
+        pi = 0
+        data = {}
+        for item in m.group(2).split(','):
+            sm = _re.match(r'\s*(\w+)\s*=\s*(.+?)\s*$', item)
+            if sm:
+                v = sm.group(2).strip()
+                if v == '?':
+                    data[sm.group(1)] = params[pi] if pi < len(params) else None
+                    pi += 1
+                else:
+                    v = v.strip("'").strip('"')
+                    try: data[sm.group(1)] = int(v)
+                    except: data[sm.group(1)] = v
+        url = self.url + '/rest/v1/' + m.group(1)
+        wm = _re.match(r'(\w+)\s*=\s*(.+)$', m.group(3).strip())
+        if wm:
+            v = wm.group(2).strip()
+            if v == '?': v = params[pi] if pi < len(params) else None
+            else: v = v.strip("'").strip('"')
+            url += '?' + wm.group(1) + '=eq.' + str(v)
+        try: requests.patch(url, json=data, headers=self._headers(), timeout=10)
+        except Exception as e: print('UPD err:', e)
+    def _del(self, sql, params):
+        m = _re.search(r'DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.+)$', sql, _re.IGNORECASE)
+        if not m: return
+        url = self.url + '/rest/v1/' + m.group(1)
+        wm = _re.match(r'(\w+)\s*=\s*(.+)$', m.group(2).strip())
+        if wm:
+            v = wm.group(2).strip()
+            if v == '?': v = params[0] if params else None
+            else: v = v.strip("'").strip('"')
+            url += '?' + wm.group(1) + '=eq.' + str(v)
+        try: requests.delete(url, headers=self._headers(), timeout=10)
+        except Exception as e: print('DEL err:', e)
+    def fetchone(self): return self._rows[0] if self._rows else None
+    def fetchall(self): return self._rows
+    def __iter__(self): return iter(self._rows)
+    def __getitem__(self, i): return self._rows[i]
+
+class _SupabaseConn:
+    def __init__(self, url, key):
+        self.url = url
+        self.key = key
+    def execute(self, sql, params=()):
+        c = _SupabaseCursor(self.url, self.key)
+        c.execute(sql, params)
+        return c
+    def commit(self): pass
+    def close(self): pass
+
+
+def db():
+    """Return Supabase if configured, else SQLite"""
+    if SUPABASE_URL and SUPABASE_KEY:
+        return _SupabaseConn(SUPABASE_URL, SUPABASE_KEY)
+    conn = sqlite3.connect("coffee.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    """Create SQLite tables only if using SQLite"""
+    if SUPABASE_URL and SUPABASE_KEY:
+        return  # Using Supabase
     try:
-        _os.remove("coffee.db")
-        print("[CLEANUP] Removed old coffee.db - using Supabase")
-    except Exception as _e:
-        print("[CLEANUP ERROR]", _e)
+        conn = db()
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+            description TEXT NOT NULL, price INTEGER NOT NULL,
+            icon TEXT DEFAULT 'CUP', stock INTEGER DEFAULT 0, low_stock INTEGER DEFAULT 5)""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fikir_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, customer TEXT NOT NULL,
+            table_no TEXT NOT NULL, items TEXT NOT NULL, total INTEGER NOT NULL,
+            status TEXT DEFAULT 'NEW', created_at TEXT NOT NULL,
+            payment_method TEXT, payment_ref TEXT, payment_status TEXT DEFAULT 'UNPAID')""")
+        cnt = conn.execute("SELECT COUNT(*) FROM fikir_products").fetchone()[0]
+        if cnt == 0:
+            seed = [("Espresso","Strong and rich coffee",50,"CUP",50,5),
+                ("Cappuccino","Smooth and creamy",50,"CUP",50,5),
+                ("Latte","Rich milk coffee",55,"CUP",50,5),
+                ("Americano","Classic black coffee",45,"CUP",50,5),
+                ("Mocha","Chocolate & coffee blend",60,"CUP",50,5),
+                ("Caramel Macchiato","Sweet and rich",60,"CUP",50,5),
+                ("Cold Coffee","Refreshingly cold",55,"CUP",50,5),
+                ("Hot Chocolate","Rich chocolate drink",50,"CUP",50,5),
+                ("Macchiato","Rich espresso with milk",70,"CUP",50,5),
+                ("ጥቁር","ጥቁር ቡና",300,"CUP",50,5),
+                ("Tea","Ethiopian traditional tea",30,"CUP",50,5),
+                ("Coffee","Steam coffee",40,"CUP",50,5),
+                ("Milk","Pure milk",50,"CUP",50,5)]
+            for p in seed:
+                conn.execute("INSERT INTO fikir_products (name,description,price,icon,stock,low_stock) VALUES (?,?,?,?,?,?)", p)
+        conn.commit()
+        conn.close()
+        print("[INIT] SQLite ready")
+    except Exception as e:
+        print("[INIT ERROR]", e)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -56,31 +234,9 @@ PRODUCTS = [
     {"id": 8, "name": "Hot Chocolate", "desc": "Rich chocolate drink", "price": 50, "icon": "🍫"},
 ]
 
-def db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+# db removed
 
-def init_db():
-    conn = db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS fikir_orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer TEXT NOT NULL,
-            table_no TEXT NOT NULL,
-            items TEXT NOT NULL,
-            total INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'NEW',
-            created_at TEXT NOT NULL,
-            payment_method TEXT,
-            payment_ref TEXT,
-            payment_status TEXT DEFAULT 'UNPAID'
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
+# init_db removed
 
 def init_products_db():
     conn = db()
@@ -2668,21 +2824,6 @@ def _init_sqlite():
 
 # Call on startup
 _init_sqlite()
-
-
-
-@app.route("/debug-env")
-def debug_env():
-    import os
-    return jsonify({
-        "SUPABASE_URL_set": bool(SUPABASE_URL),
-        "SUPABASE_KEY_set": bool(SUPABASE_KEY),
-        "SUPABASE_URL_value": SUPABASE_URL[:40] if SUPABASE_URL else "EMPTY",
-        "SUPABASE_KEY_length": len(SUPABASE_KEY) if SUPABASE_KEY else 0,
-        "db_type": type(db()).__name__,
-        "coffee_db_exists": os.path.exists("coffee.db"),
-        "coffee_db_size": os.path.getsize("coffee.db") if os.path.exists("coffee.db") else 0
-    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
