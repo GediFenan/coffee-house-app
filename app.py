@@ -26,6 +26,7 @@ class _SupabaseCursor:
         self.url = url.rstrip('/')
         self.key = key
         self._rows = []
+        self.lastrowid = None
     def _headers(self, extra=None):
         h = {'apikey': self.key, 'Authorization': 'Bearer ' + self.key,
              'Content-Type': 'application/json', 'Prefer': 'return=representation'}
@@ -95,7 +96,11 @@ class _SupabaseCursor:
                 headers=self._headers(), timeout=10)
             if r.ok and r.text:
                 res = r.json()
-                if isinstance(res, list) and res: self._rows = [_SupabaseRow(res[0])]
+                if isinstance(res, list) and res:
+                    self._rows = [_SupabaseRow(res[0])]
+                    # Set lastrowid from returned id
+                    if 'id' in res[0]:
+                        self.lastrowid = res[0]['id']
         except Exception as e: print('INSERT err:', e)
     def _upd(self, sql, params):
         m = _re.search(r'UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)$', sql, _re.IGNORECASE)
@@ -911,30 +916,8 @@ def checkout():
         conn.close()
 
         send_telegram(f"🛒 New Order #{order_id} - {customer} - Table {table_no} - ETB {total} - {item_text}\n\n📍 Track: {{ BASE_URL }}/track/{order_id}\n\n📍 Track: http://127.0.0.1:5000/track/{order_id}")
-    # Also send the order to Supabase when Render environment variables are available
-        if SUPABASE_URL and SUPABASE_KEY:
-            try:
-                requests.post(
-                    SUPABASE_URL.rstrip("/") + "/rest/v1/fikir_orders",
-                    headers={
-                        **get_supabase_headers(),
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    json={
-                        "customer": customer,
-                        "table_no": table_no,
-                        "items": item_text,
-                        "total": total,
-                        "status": "NEW",
-                        "created_at": created_at
-                    },
-                    timeout=10
-                )
-            except requests.RequestException:
-                pass
-        session["cart"] = {}
-        return redirect(url_for("success", order_id=order_id))
+    # (Supabase block removed - db() handles it now)
+
     body = checkout_form(items,total)
     return page(body, "cart")
 
