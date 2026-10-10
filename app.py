@@ -197,8 +197,7 @@ def init_db():
                 ("Milk","Pure milk",50,"CUP",50,5)]
             for p in seed:
                 conn.execute("INSERT INTO fikir_products (name,description,price,icon,stock,low_stock) VALUES (?,?,?,?,?,?)", p)
-        conn.commit()
-        conn.close()
+        
         print("[INIT] SQLite ready")
     except Exception as e:
         print("[INIT ERROR]", e)
@@ -224,6 +223,59 @@ CBE_NAME = os.getenv("CBE_NAME", "FIKIR Coffee House")
 from datetime import datetime
 
 app = Flask(__name__)
+# ─── Staff Blueprint (Phase 1) ───
+from staff_routes import staff_bp
+app.register_blueprint(staff_bp)
+
+# ─── POS Blueprint (Phase 1) ───
+from pos_routes import pos_bp
+app.register_blueprint(pos_bp)
+
+# ─── Kitchen Blueprint ───
+from kitchen_routes import kitchen_bp
+app.register_blueprint(kitchen_bp)
+
+# ─── Owner Blueprint ───
+from owner_routes import owner_bp
+app.register_blueprint(owner_bp)
+
+# ─── Expenses Blueprint ───
+from expenses_routes import expenses_bp
+app.register_blueprint(expenses_bp)
+
+# ─── Staff Admin Blueprint ───
+from staff_admin_routes import staff_admin_bp
+app.register_blueprint(staff_admin_bp)
+
+# ─── Reports Blueprint ───
+from reports_routes import reports_bp
+app.register_blueprint(reports_bp)
+
+# ─── Inventory Blueprint ───
+from inventory_routes import inventory_bp
+app.register_blueprint(inventory_bp)
+
+# ─── PWA Blueprint ───
+from pwa_routes import pwa_bp
+app.register_blueprint(pwa_bp)
+
+# ─── Notifications Blueprint ───
+from notifications_routes import notify_bp
+app.register_blueprint(notify_bp)
+
+# ─── Products Admin Blueprint ───
+from products_admin_routes import products_admin_bp
+app.register_blueprint(products_admin_bp)
+
+# ─── QR Menu Blueprint ───
+from qr_menu_routes import qr_menu_bp
+app.register_blueprint(qr_menu_bp)
+
+# ─── Offline Blueprint ───
+from offline_routes import offline_bp, _start_background_sync
+app.register_blueprint(offline_bp)
+_start_background_sync()
+
 app.secret_key = "fikir-coffee-house-secret-key-change-later"
 
 DB = "coffee.db"
@@ -906,8 +958,8 @@ def checkout():
 
         # Save locally for the existing Kitchen Dashboard
         cur = conn.execute(
-            "INSERT INTO fikir_orders(customer,table_no,items,total,status,created_at) VALUES(?,?,?,?,?,?)",
-            (customer, table_no, item_text, total, "NEW", created_at)
+            "INSERT INTO fikir_orders(customer,table_no,items,total,status,created_at,phone,payment_method) VALUES(?,?,?,?,?,?,?,?)",
+            (customer, table_no, item_text, total, "NEW", created_at, request.form.get('phone', ''), request.form.get('payment_method', 'cash'))
         )
         order_id = cur.lastrowid
 
@@ -915,263 +967,21 @@ def checkout():
         conn.commit()
         conn.close()
 
-        send_telegram(f"🛒 New Order #{order_id} - {customer} - Table {table_no} - ETB {total} - {item_text}\n\n📍 Track: {{ BASE_URL }}/track/{order_id}\n\n📍 Track: http://127.0.0.1:5000/track/{order_id}")
-    # (Supabase block removed - db() handles it now)
-
-    body = checkout_form(items,total)
-    return page(body, "cart")
-
-def checkout_form(items,total):
-    return render_template_string(r"""
-<div class="formbox">
-  <div class="title"><div><h2>📝 Customer Details</h2><p>Your order will be sent directly to the Kitchen Dashboard.</p></div></div>
-  <div class="card" style="padding:22px">
-    <form method="post">
-      <label>Customer Name</label><input name="customer" placeholder="Enter customer name" required>
-      <label>Table Number</label><input name="table_no" placeholder="e.g. 1" required>
-      <div class="notice">Order total: <b>ETB {{ total }}</b></div>
-      <div style="margin-top:15px;padding:15px;background:#0a0805;border:1px solid #2a2018;border-radius:10px">
-      <p style="color:#f0b34e;font-size:13px;font-weight:bold;margin:0 0 10px">💳 Payment Method</p>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <label style="display:flex;align-items:center;gap:10px;padding:10px;background:#1a1410;border-radius:8px;cursor:pointer">
-          <input type="radio" name="payment_method" value="telebirr" checked style="width:auto">
-          <span style="color:#fff;font-size:14px">📱 Telebirr</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:10px;padding:10px;background:#1a1410;border-radius:8px;cursor:pointer">
-          <input type="radio" name="payment_method" value="cbebirr" style="width:auto">
-          <span style="color:#fff;font-size:14px">🏦 CBE Birr</span>
-        </label>
-      </div>
-      <div id="payment-info" style="margin-top:12px;padding:10px;background:#2a2018;border-radius:8px;font-size:12px;color:#f0b34e">
-        <strong>Telebirr:</strong> Send ETB {{ total }} to <b>{{ telebirr_number }}</b><br>
-        Name: {{ telebirr_name }}
-      </div>
-    </div>
-    <button class="btn" style="width:100%;margin-top:15px">✅ PLACE ORDER</button>
-    </form>
-  </div>
-</div>
-""", items=items, total=total, telebirr_number=TELEBIRR_NUMBER, telebirr_name=TELEBIRR_NAME, cbe_account=CBE_ACCOUNT, cbe_name=CBE_NAME)
-
-@app.route("/success")
-def success():
-    order_id = request.args.get("order_id", type=int)
-    conn=db(); order=conn.execute("SELECT * FROM fikir_orders WHERE id=?", (order_id,)).fetchone(); conn.close()
-    if not order: return redirect(url_for("home"))
-    body = render_template_string(r"""
-<div class="formbox">
-  <div class="card" style="padding:30px;text-align:center">
-    <div style="font-size:55px">✅</div><h2>Order Sent!</h2>
-    <p>Order #: <b>{{ order.id }}</b></p>
-    <p>Customer: <b>{{ order.customer }}</b></p>
-    <p>Table: <b>{{ order.table_no }}</b></p>
-    <p>Total: <b style="color:#f0b34e">ETB {{ order.total }}</b></p>
-    <div class="notice">👨‍🍳 Your order has been sent to the kitchen.</div>
-    <div style="background:#0a0805;border:2px solid #f0b34e;border-radius:12px;padding:20px;margin-top:20px;text-align:left">
-      <h3 style="color:#f0b34e;margin:0 0 12px;font-size:16px">💳 Confirm Payment</h3>
-      <p style="color:#aaa;font-size:12px;margin:0 0 12px">After sending payment, enter the transaction ID below:</p>
-      <select id="pay-method" style="width:100%;padding:10px;background:#1a1410;border:1px solid #2a2018;color:#f0b34e;border-radius:8px;margin-bottom:10px;font-size:14px;box-sizing:border-box">
-        <option value="telebirr">📱 Telebirr</option>
-        <option value="cbebirr">🏦 CBE Birr</option>
-      </select>
-      <input type="text" id="tx-id" placeholder="Transaction ID (e.g. FT23ABC...)" style="width:100%;padding:12px;background:#1a1410;border:1px solid #2a2018;color:#fff;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
-      <button onclick="submitPayment({{ order.id }})" style="width:100%;padding:12px;background:#4caf50;color:#fff;border:0;border-radius:8px;font-weight:bold;font-size:14px;cursor:pointer">✅ Payment Sent</button>
-      <p id="pay-status" style="color:#4caf50;font-size:12px;margin:10px 0 0;text-align:center"></p>
-    </div>
-    
-    <script>
-    function submitPayment(orderId) {
-      var txId = document.getElementById('tx-id').value.trim();
-      var method = document.getElementById('pay-method').value;
-      var status = document.getElementById('pay-status');
-      if (!txId) { status.style.color='#e74c3c'; status.textContent='Please enter Transaction ID'; return; }
-      status.style.color='#f0b34e';
-      status.textContent='Submitting...';
-      var fd = new FormData();
-      fd.append('order_id', orderId);
-      fd.append('tx_id', txId);
-      fd.append('method', method);
-      fetch('/payment/confirm', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (d.ok) {
-            status.style.color='#4caf50';
-            status.textContent='✅ Payment confirmed! Kitchen has been notified.';
-          } else {
-            status.style.color='#e74c3c';
-            status.textContent='Error: ' + (d.error || 'Try again');
-          }
-        })
-        .catch(function() {
-          status.style.color='#e74c3c';
-          status.textContent='Network error. Try again.';
-        });
-    }
-    </script>
-    
-    <a class="btn" href="/track/{{ order.id }}" style="background:#4caf50;color:#fff;margin-right:8px;margin-top:15px">📍 Track Order</a>
-        <a class="btn" href="/">🔄 New Order</a>
-  </div>
-</div>
-""", order=order)
-    return page(body)
-
-
-
-@app.route("/kitchen/login", methods=["GET", "POST"])
-def kitchen_login():
-    error = ""
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        if password == KITCHEN_PASSWORD:
-            session["kitchen_logged_in"] = True
-            return redirect(url_for("kitchen"))
-        error = '<div style="background:#3a1a1a;border:1px solid #e74c3c;color:#ff9999;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px">Incorrect password</div>'
-    
-    body = '<div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:20px">'
-    body += '<div style="padding:35px;max-width:420px;width:100%;background:linear-gradient(135deg,#1a1410,#0a0805);border:1px solid #d4af37;border-radius:20px;box-shadow:0 20px 60px rgba(212,175,55,.2)">'
-    body += '<div style="text-align:center;margin-bottom:25px">'
-    body += '<div style="font-size:64px">CHEF</div>'
-    body += '<h2 style="color:#f0b34e;margin:10px 0 5px;font-size:24px">Kitchen Login</h2>'
-    body += '<p style="color:#888;font-size:12px;letter-spacing:2px;margin:0">FIKIR COFFEE HOUSE</p>'
-    body += '</div>'
-    body += error
-    body += '<form method="post">'
-    body += '<label style="display:block;color:#aaa;font-size:13px;margin-bottom:6px">Password</label>'
-    body += '<input type="password" name="password" required autofocus placeholder="Enter password" style="width:100%;padding:12px;background:#0a0805;border:1px solid #2a2018;color:#fff;border-radius:10px;font-size:15px;margin-bottom:18px;box-sizing:border-box">'
-    body += '<button type="submit" class="btn" style="width:100%;padding:14px;font-size:15px;font-weight:bold">Login</button>'
-    body += '</form>'
-    body += '<p style="text-align:center;color:#555;font-size:11px;margin-top:20px">For Kitchen Staff Only</p>'
-    body += '</div></div>'
-    
-    return render_template_string(BASE, body=body, page="kitchen_login", title="Kitchen Login", cart_count=cart_data()[0])
-
-
-@app.route("/kitchen/logout")
-def kitchen_logout():
-    session.pop("kitchen_logged_in", None)
-    return redirect(url_for("kitchen_login"))
-
-
-
-def kitchen_logout():
-    session.pop("kitchen_logged_in", None)
-    return redirect(url_for("kitchen_login"))
-
-
-@app.route("/kitchen")
-def kitchen():
-    if not session.get("kitchen_logged_in"):
-        return redirect(url_for("kitchen_login"))
-    conn=db()
-    orders=conn.execute("SELECT * FROM fikir_orders ORDER BY id DESC").fetchall()
-    conn.close()
-    body = render_template_string(r"""
-<div class="title">
-  <div><h2>👨‍🍳 Kitchen Dashboard</h2><p>Live customer orders</p></div>
-  <a class="btn" href="/kitchen/logout" style="background:#e74c3c;color:#fff;margin-right:8px">🚪 Logout</a>
-<a class="btn secondary" href="/">← Customer Menu</a>
-</div>
-{% if orders %}
-<div class="kitchen-grid">
-{% for o in orders %}
-<div class="kitchen-card">
-  <div class="row"><h3>Order #{{ o.id }}</h3><span class="status">{{ o.status }}</span>
-    <button onclick="printReceipt({{ o.id }}, '{{ o.customer }}', '{{ o.table_no }}', '{{ o.items|replace("'", "\\'") }}', {{ o.total }}, '{{ o.created_at }}')" style="background:#f0b34e;color:#000;border:0;padding:4px 8px;border-radius:4px;font-size:11px;cursor:pointer;margin-left:8px">🖨️ Print</button>
-  </div>
-  <p>👤 <b>{{ o.customer }}</b></p><p>🪑 Table: <b>{{ o.table_no }}</b></p>
-  <p>🕒 {{ o.created_at }}</p>
-  <hr style="border-color:#332619">
-  <p>☕ {{ o.items }}</p>
-  <p class="price">ETB {{ o.total }}</p>
-  <form method="post" action="/kitchen/status">
-    <input type="hidden" name="order_id" value="{{ o.id }}">
-    <select name="status">
-      {% for s in ["NEW","PREPARING","READY","COMPLETED"] %}
-      <option value="{{ s }}" {% if o.status==s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-    <br><br><button class="btn" style="width:100%">Update Status</button>
-  </form>
-</div>
-{% endfor %}
-</div>
-{% else %}
-<div class="card" style="padding:35px;text-align:center"><h2>No orders yet ☕</h2><p style="color:#aaa">New customer orders will appear here.</p></div>
-{% endif %}
-""", orders=orders)
-    return page(body, "kitchen", "Kitchen Dashboard — FIKIR")
-
-
-@app.route("/admin/login", methods=["GET", "POST"])
-def admin_login():
-    error = ""
-    if request.method == "POST":
-        password = request.form.get("password", "")
-        if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
-            session["admin_logged_in"] = True
-            return redirect(url_for("admin"))
-        error = '<div style="background:#3a1a1a;border:1px solid #e74c3c;color:#ff9999;padding:10px;border-radius:8px;margin-bottom:15px;font-size:13px">Incorrect password</div>'
-    
-    body = '<div style="min-height:70vh;display:flex;align-items:center;justify-content:center;padding:20px">'
-    body += '<div style="padding:35px;max-width:420px;width:100%;background:linear-gradient(135deg,#1a1410,#0a0805);border:1px solid #d4af37;border-radius:20px;box-shadow:0 20px 60px rgba(212,175,55,.2)">'
-    body += '<div style="text-align:center;margin-bottom:25px">'
-    body += '<div style="font-size:64px">ADMIN</div>'
-    body += '<h2 style="color:#f0b34e;margin:10px 0 5px;font-size:24px">Admin Login</h2>'
-    body += '<p style="color:#888;font-size:12px;letter-spacing:2px;margin:0">FIKIR COFFEE HOUSE</p>'
-    body += '</div>'
-    body += error
-    body += '<form method="post">'
-    body += '<label style="display:block;color:#aaa;font-size:13px;margin-bottom:6px">Password</label>'
-    body += '<input type="password" name="password" required autofocus placeholder="Enter admin password" style="width:100%;padding:12px;background:#0a0805;border:1px solid #2a2018;color:#fff;border-radius:10px;font-size:15px;margin-bottom:18px;box-sizing:border-box">'
-    body += '<button type="submit" class="btn" style="width:100%;padding:14px;font-size:15px;font-weight:bold">Login</button>'
-    body += '</form>'
-    body += '<p style="text-align:center;color:#555;font-size:11px;margin-top:20px">Owner Access Only</p>'
-    body += '</div></div>'
-    
-    return render_template_string(BASE, body=body, page="admin_login", title="Admin Login", cart_count=cart_data()[0])
-
-
-@app.route("/admin/logout")
-def admin_logout():
-    session.pop("admin_logged_in", None)
-    return redirect(url_for("admin_login"))
-
-@app.post("/admin/products/add")
-def admin_add_product():
-    if not session.get("admin_logged_in"):
-        return redirect(url_for("admin_login"))
-
-    name = request.form.get("name", "").strip()
-    description = request.form.get("description", "").strip()
-    icon = request.form.get("icon", "☕").strip() or "☕"
-    price = request.form.get("price", type=int)
-    stock = request.form.get("stock", type=int)
-    low_stock = request.form.get("low_stock", type=int)
-
-    if stock is None:
-        stock = 0
-
-    if low_stock is None:
-        low_stock = 5
-
-    if not name or not description or not price or price <= 0:
-        return redirect(url_for("admin"))
-
-
-    # SQLite fallback
-    conn = db()
-    conn.execute(
-        """
-        INSERT INTO fikir_products
-        (name, description, price, icon, stock, low_stock)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (name, description, price, icon, stock, low_stock)
+        send_telegram(
+        "🔔 <b>አዲስ ትዕዛዝ!</b> #" + str(order_id) + "\n"
+        "━━━━━━━━━━━━━━━\n"
+        "👤 <b>" + str(customer) + "</b>\n"
+        "📞 " + str(request.form.get('phone', 'N/A')) + "\n"
+        "🪑 Table " + str(table_no) + "\n"
+        "━━━━━━━━━━━━━━━\n"
+        "📦 <b>ዝርዝር:</b>\n" + item_text + "\n"
+        "━━━━━━━━━━━━━━━\n"
+        "💰 <b>ጠቅላላ: ETB " + str(total) + "</b>\n"
+        "💳 " + str(request.form.get('payment_method', 'Cash')).title() + "\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🕐 " + str(created_at) + "\n"
+        "📍 Track: " + BASE_URL + "/track/" + str(order_id)
     )
-    conn.commit()
-    conn.close()
-
     return redirect(url_for("admin"))
 
 
@@ -2714,8 +2524,8 @@ def waiter_place_order():
     
     conn = db()
     cur = conn.execute(
-        "INSERT INTO fikir_orders (customer, table_no, items, total, status, created_at) VALUES (?,?,?,?,?,?)",
-        (customer, str(table_no), item_text, total, "NEW", created_at)
+        "INSERT INTO fikir_orders (customer, table_no, items, total, status, created_at, phone, payment_method) VALUES (?,?,?,?,?,?,?,?)",
+        (customer, str(table_no), item_text, total, "NEW", created_at, request.form.get('phone', ''), request.form.get('payment_method', 'cash'))
     )
     order_id = cur.lastrowid
     conn.commit()
