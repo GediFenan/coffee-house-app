@@ -310,14 +310,18 @@ def create():
                 icons=ICON_OPTIONS, error="ስም እና ዋጋ ያስፈልጋሉ", **s)
 
         payload = {
-            "name": name, "price": price,
-            "description": description or "",
-            "icon": icon, "stock": stock, "low_stock": low_stock,
+            "name": str(name),
+            "price": round(float(price), 2),
+            "description": str(description or ""),
+            "icon": str(icon),
+            "stock": int(stock),
+            "low_stock": int(low_stock),
             "is_active": True,
         }
         if category_id:
             try: payload["category_id"] = int(category_id)
             except ValueError: pass
+        print(f"[CREATE PAYLOAD] {payload}")
 
         try:
             r = requests.post(f"{SUPABASE_URL}/rest/v1/fikir_products",
@@ -368,15 +372,19 @@ def edit(product_id):
                 icons=ICON_OPTIONS, error="ስም እና ዋጋ ያስፈልጋሉ", **s)
 
         payload = {
-            "name": name, "price": price,
-            "description": description or "",
-            "icon": icon, "stock": stock, "low_stock": low_stock,
+            "name": str(name),
+            "price": round(float(price), 2),
+            "description": str(description or ""),
+            "icon": str(icon),
+            "stock": int(stock),
+            "low_stock": int(low_stock),
         }
         if category_id:
             try: payload["category_id"] = int(category_id)
-            except ValueError: pass
+            except ValueError: payload["category_id"] = None
         else:
             payload["category_id"] = None
+        print(f"[UPDATE PAYLOAD] {payload}")
 
         try:
             r = requests.patch(f"{SUPABASE_URL}/rest/v1/fikir_products?id=eq.{product_id}",

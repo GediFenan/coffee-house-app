@@ -350,8 +350,8 @@ SUCCESS_HTML = """
   <div class="order">
     <div class="row"><span>Order #</span><span class="id">#{{ order.id }}</span></div>
     <div class="row"><span>Table</span><span><b>{{ table_no }}</b></span></div>
-    <div class="row"><span>Customer</span><span>{{ order.customer }}</span></div>
-    <div class="tot"><span>TOTAL</span><span>{{ "%.2f"|format(order.total|float) }} ETB</span></div>
+    <div class="row"><span>Customer</span><span>{{ order["customer"] }}</span></div>
+    <div class="tot"><span>TOTAL</span><span>{{ "%.2f"|format(order["total"]|float) }} ETB</span></div>
   </div>
 
   <div class="actions">
@@ -456,8 +456,8 @@ TRACK_HTML = """
 </style></head><body>
 <div class="wrap">
   <div class="card">
-    <h1>Order #{{ order.id }} <span class="status-badge badge-{{ order.status }}">{{ order.status }}</span></h1>
-    <div class="sub">Table {{ table_no }} · {{ order.customer }}</div>
+    <h1>Order #{{ order["id"] }} <span class="status-badge badge-{{ order["status"] }}">{{ order["status"] }}</span></h1>
+    <div class="sub">Table {{ table_no }} · {{ order["customer"] }}</div>
     <div class="stage">
       {% set active1 = order.status in ['NEW','PAID','PREPARING','READY','DELIVERED'] %}
       {% set active2 = order.status in ['PREPARING','READY','DELIVERED'] %}
@@ -480,8 +480,8 @@ TRACK_HTML = """
         <div class="info"><div class="nm">ተላልፏል</div><div class="desc">እንደገና ይመጡ!</div></div>
       </div>
     </div>
-    <div class="items">{{ order.items }}</div>
-    <div class="tot"><span>TOTAL</span><span>{{ "%.2f"|format(order.total|float) }} ETB</span></div>
+    <div class="items">{{ order["items"] }}</div>
+    <div class="tot"><span>TOTAL</span><span>{{ "%.2f"|format(order["total"]|float) }} ETB</span></div>
   </div>
   <div class="act">
     <a href="{{ url_for('qr_menu.track', table_no=table_no, order_id=order.id) }}">🔄 አድስ</a>
