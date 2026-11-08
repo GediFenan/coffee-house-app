@@ -247,68 +247,59 @@ DASH_HTML = """
 <title>FIKIR — {{ role|upper }}</title>
 <style>
 :root {
-  color-scheme: dark;
-  --bg: #111213;
-  --surface: #1b1d1f;
-  --surface2: #222426;
-  --gold: #c9a66b;
-  --text: #f5f2eb;
-  --muted: #a8a39a;
-  --border: rgba(201,166,107,.18);
+  color-scheme: light;
+  --bg: #f5f2ec;
+  --surface: #ffffff;
+  --text: #292722;
+  --muted: #77716a;
+  --brown: #795548;
+  --gold: #b18a55;
+  --border: #e9e2d8;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: Inter, system-ui, sans-serif;
-  background: radial-gradient(ellipse at top, #292725 0%, #151617 48%, #101112 100%);
+  background: var(--bg);
   color: var(--text);
   min-height: 100vh;
 }
 .top {
-  background: rgba(20,21,22,.96);
-  border-bottom: 1px solid var(--border);
-  color: var(--gold);
-  padding: 18px clamp(16px,4vw,40px);
+  background: #fff;
+  color: var(--text);
+  padding: 17px clamp(16px,4vw,40px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,.035);
   position: sticky;
   top: 0;
   z-index: 10;
 }
-.top h1 {
-  margin: 0;
-  font-size: clamp(16px,2vw,21px);
-  font-weight: 750;
-  letter-spacing: .5px;
-}
+.top h1 { margin: 0; font-size: 19px; font-weight: 750; }
 .top a {
-  color: var(--gold);
+  color: var(--brown);
   text-decoration: none;
   font-size: 13px;
   font-weight: 650;
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 9px 15px;
-  transition: .2s;
 }
-.top a:hover {
-  background: var(--gold);
-  color: #171717;
-}
+.top a:hover { background: var(--brown); color: #fff; }
 .wrap {
   padding: 28px 18px 45px;
   max-width: 1050px;
   margin: 0 auto;
 }
 .card {
-  background: linear-gradient(145deg,#202224,#191b1d);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 17px;
+  border-radius: 15px;
   padding: 21px;
   margin-bottom: 17px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+  box-shadow: 0 3px 12px rgba(55,42,27,.045);
 }
 .wrap > .card:first-child {
   display: flex;
@@ -320,21 +311,17 @@ body {
   margin-top: 0 !important;
   color: var(--muted) !important;
 }
-.card h2 {
-  margin: 0 0 10px;
-  font-size: 15px;
-  color: var(--gold);
-}
+.card h2 { margin: 0 0 10px; font-size: 15px; color: var(--brown); }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit,minmax(190px,1fr));
   gap: 14px;
 }
 .tile {
-  min-height: 132px;
-  background: linear-gradient(145deg,#222527,#191b1d);
-  border: 1px solid rgba(255,255,255,.075);
-  border-radius: 16px;
+  min-height: 130px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 19px;
   display: flex;
   flex-direction: column;
@@ -344,42 +331,39 @@ body {
   text-align: left;
   text-decoration: none;
   color: var(--text);
-  transition: transform .2s,border-color .2s,background .2s;
+  box-shadow: 0 3px 10px rgba(55,42,27,.035);
+  transition: .2s;
 }
 .tile:hover {
   transform: translateY(-3px);
   border-color: var(--gold);
-  background: linear-gradient(145deg,#302a21,#202224);
-}
-.tile:focus-visible,.top a:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
+  box-shadow: 0 7px 18px rgba(55,42,27,.09);
 }
 .tile .ico {
   width: 47px;
   height: 47px;
   display: grid;
   place-items: center;
-  background: rgba(201,166,107,.12);
-  border: 1px solid var(--border);
-  border-radius: 13px;
+  background: #f5f0e8;
+  border: 1px solid #eee5d8;
+  border-radius: 12px;
   font-size: 25px;
 }
-.tile .lbl {
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: .2px;
-}
+.tile .lbl { font-size: 14px; font-weight: 650; }
 .pill {
   display: inline-block;
-  background: rgba(201,166,107,.13);
-  color: var(--gold);
-  border: 1px solid var(--border);
+  background: #f3ece2;
+  color: var(--brown);
+  border: 1px solid #e8dac9;
   padding: 6px 12px;
   border-radius: 7px;
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 1px;
+}
+a:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 @media(max-width:560px) {
   .top { padding: 15px; }
