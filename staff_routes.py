@@ -246,18 +246,155 @@ DASH_HTML = """
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FIKIR — {{ role|upper }}</title>
 <style>
-  body{margin:0;font-family:system-ui,sans-serif;background:#f5ece0;color:#3b1f0b}
-  .top{background:#6b3e1e;color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
-  .top h1{margin:0;font-size:17px}
-  .top a{color:#fff;text-decoration:none;font-size:13px;opacity:.9}
-  .wrap{padding:20px;max-width:640px;margin:0 auto}
-  .card{background:#fff;border-radius:16px;padding:20px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-  .card h2{margin:0 0 8px;font-size:15px;color:#6b3e1e}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .tile{background:#fff;border-radius:14px;padding:18px;text-align:center;text-decoration:none;color:#3b1f0b;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-  .tile .ico{font-size:32px;display:block;margin-bottom:6px}
-  .tile .lbl{font-size:13px;font-weight:600}
-  .pill{display:inline-block;background:#e6d5c0;color:#6b3e1e;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+:root {
+  color-scheme: dark;
+  --bg: #111213;
+  --surface: #1b1d1f;
+  --surface2: #222426;
+  --gold: #c9a66b;
+  --text: #f5f2eb;
+  --muted: #a8a39a;
+  --border: rgba(201,166,107,.18);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: radial-gradient(ellipse at top, #292725 0%, #151617 48%, #101112 100%);
+  color: var(--text);
+  min-height: 100vh;
+}
+.top {
+  background: rgba(20,21,22,.96);
+  border-bottom: 1px solid var(--border);
+  color: var(--gold);
+  padding: 18px clamp(16px,4vw,40px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.top h1 {
+  margin: 0;
+  font-size: clamp(16px,2vw,21px);
+  font-weight: 750;
+  letter-spacing: .5px;
+}
+.top a {
+  color: var(--gold);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 650;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 15px;
+  transition: .2s;
+}
+.top a:hover {
+  background: var(--gold);
+  color: #171717;
+}
+.wrap {
+  padding: 28px 18px 45px;
+  max-width: 1050px;
+  margin: 0 auto;
+}
+.card {
+  background: linear-gradient(145deg,#202224,#191b1d);
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  padding: 21px;
+  margin-bottom: 17px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+.wrap > .card:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.wrap > .card:first-child div {
+  margin-top: 0 !important;
+  color: var(--muted) !important;
+}
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: var(--gold);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(190px,1fr));
+  gap: 14px;
+}
+.tile {
+  min-height: 132px;
+  background: linear-gradient(145deg,#222527,#191b1d);
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 16px;
+  padding: 19px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  text-decoration: none;
+  color: var(--text);
+  transition: transform .2s,border-color .2s,background .2s;
+}
+.tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--gold);
+  background: linear-gradient(145deg,#302a21,#202224);
+}
+.tile:focus-visible,.top a:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.tile .ico {
+  width: 47px;
+  height: 47px;
+  display: grid;
+  place-items: center;
+  background: rgba(201,166,107,.12);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  font-size: 25px;
+}
+.tile .lbl {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: .2px;
+}
+.pill {
+  display: inline-block;
+  background: rgba(201,166,107,.13);
+  color: var(--gold);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 1px;
+}
+@media(max-width:560px) {
+  .top { padding: 15px; }
+  .wrap { padding: 18px 13px 30px; }
+  .wrap > .card:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  .tile { min-height: 116px; padding: 14px; }
+  .tile .ico { width: 41px; height: 41px; font-size: 22px; }
+  .tile .lbl { font-size: 12px; }
+  .card { padding: 17px; }
+}
 </style></head><body>
 <div class="top">
   <h1>☕ FIKIR — {{ full_name }}</h1>
